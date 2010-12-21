@@ -54,8 +54,8 @@ index :: PVector e -> Int -> e
                              then arrayAppend parent $ LeafNode tail
                              else if subIx > snd (bounds parent)
                                   then arrayAppend parent $ newPath (level-shiftStep) tail
-                                       else (parent // [(subIx,
-                                            pushTail cnt (level-shiftStep) (parent ! subIx) tail)])
+                                  else (parent // [(subIx,
+                                       pushTail cnt (level-shiftStep) (parent ! subIx) tail)])
                   in BodyNode array
 
           newPath :: Int -> Array Int e -> Node e
