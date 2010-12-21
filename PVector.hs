@@ -1,7 +1,6 @@
-module PVector (main) where
+module PVector (PVector, index, (|>), toList, empty) where
 
-import Control.Monad
-import Data.Array
+import Data.Array hiding (index)
 import Data.Bits hiding (shift)
 import Control.Exception
 import Prelude hiding (tail)
@@ -18,17 +17,10 @@ data PVector e = PV {
     }
 
 instance (Show e) => Show (PVector e) where
-    show (PV c s r t) = "c = " ++ (show c) ++
-                        ", s = " ++ (show s) ++
-                        ", r = " ++ (show r) ++
-                        ", t: " ++ show (elems t)
+    show = show.toList
 
 data Node e = BodyNode (Array Int (Node e)) |
               LeafNode (Array Int e)
-
-instance (Show e) => Show (Node e) where
-    show (BodyNode x) = show $ elems x
-    show (LeafNode x) = show $ elems x
 
 emptyNode :: Node e
 emptyNode = BodyNode $ array (0, -1) []
@@ -37,13 +29,18 @@ empty :: PVector e
 empty = PV 0 shiftStep emptyNode $ array (0, -1) []
 
 index :: PVector e -> Int -> e
-pv `index` ix | ix >= cnt pv = throw $ IndexOutOfBounds ""
-              | ix >= chunk  = throw $ IndexOutOfBounds "TODO"
-              | otherwise    = (tail pv) ! ix
+(PV c s r t) `index` ix | ix >= c || ix < 0 = throw $ IndexOutOfBounds ""
+                        | ix >= tailOff c   = t ! (ix - tailOff c)
+                        | otherwise         = lookup r s ix
+    where lookup :: Node e -> Int -> Int -> e
+          lookup node level ix = let subIx = (ix `shiftR` level) .&. mask
+                                     in case node of
+                                             BodyNode a -> lookup (a ! subIx) (level-shiftStep) ix
+                                             LeafNode a -> a ! subIx
 
 (|>) :: PVector e -> e -> PVector e
 (PV c s r t) |> el =
-    let tailIx = c - tailoff c
+    let tailIx = c - tailOff c
         in if tailIx < chunk
               then let newTail = listArray (0, tailIx) $ elems t ++ [el]
                        in PV (c+1) s r newTail
@@ -78,11 +75,10 @@ update ix el pv | ix >= cnt pv = throw $ IndexOutOfBounds ""
                 | ix >= chunk  = throw $ IndexOutOfBounds "TODO"
                 | otherwise    = PV (cnt pv) (shift pv) (root pv) (tail pv // [(ix, el)])
 
-tailoff :: Int -> Int
-tailoff count = if count < chunk
+tailOff :: Int -> Int
+tailOff count = if count < chunk
                    then 0
                    else (count-1) .&. (complement mask)
 
-main = do
-    forM_ (map (\x -> foldl (|>) empty [1..x]) [1..40])
-          (\pv -> print pv)
+toList :: PVector e -> [e]
+toList pv = [pv `index` x | x <- [0..(cnt pv)-1]]
