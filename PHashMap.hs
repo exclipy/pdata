@@ -39,6 +39,28 @@ updateNode shift hash key value (ArrayNode subNodes) =
         in ArrayNode $ subNodes // [(subHash, newChild)]
 
 
+index :: (Eq k) => PHashMap k v -> k -> v
+
+index (PHM hashFn root) key = indexNode 0 (hashFn key) key root
+
+
+indexNode :: (Eq k) => Int -> Word32 -> k -> Node k v -> v
+
+indexNode _ _ _ EmptyNode = undefined
+
+indexNode _ _ searchKey (LeafNode _ key value) = if searchKey == key then value
+                                                                     else undefined
+indexNode shift hash searchKey (ArrayNode subNodes) =
+    let subHash = hashFragment shift hash
+        in indexNode (shift+shiftStep) hash searchKey (subNodes!subHash)
+
+indexNode _ _ searchKey (HashCollisionNode _ pairs) =
+    find searchKey pairs
+    where find searchKey [] = undefined
+          find searchKey ((key, value):pairs) | searchKey == key = value
+                                              | otherwise        = find searchKey pairs
+
+
 makeArrayNode :: (Eq k) => Int -> (Word32, k, v) -> (Word32, k, v) -> Node k v
 
 makeArrayNode shift (hash1, key1, value1) (hash2, key2, value2) =
