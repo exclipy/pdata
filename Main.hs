@@ -1,5 +1,9 @@
 import Control.Monad
-import PVector
+import PHashMap
+import Data.Word
 
-main = do forM_ [0..69] (\x ->
-            print $ update x 0 $ foldl (|>) empty [1..70])
+main = let hashFn x = if even x then 0 else 1
+           hmaps = take 32 $ zipWith (\hm i -> update i i hm)
+                                     ((empty hashFn):hmaps)
+                                     [0, 5, 31, 32, 1]
+           in forM_ hmaps (print.show)

@@ -1,3 +1,4 @@
+module PHashMap where
 import Data.Bits
 import Data.Word
 import Data.List
@@ -9,43 +10,74 @@ data (Eq k) => PHashMap k v = PHM {
 }
 
 instance (Eq k, Show k, Show v) => Show (PHashMap k v) where
-    show (PHM _ root) = show root
+    show (PHM _hashFn root) = show root
+
 
 empty :: (Eq k) => (k -> Word32) -> PHashMap k v
 empty hashFn = PHM hashFn EmptyNode
 
+
 update :: (Eq k) => k -> v -> PHashMap k v -> PHashMap k v
-update key value (PHM hashFn root) = PHM hashFn $ updateNode (hashFn key) key value root
+update key value (PHM hashFn root) = PHM hashFn $ updateNode 0 (hashFn key) key value root
 
-updateNode :: (Eq k) => Word32 -> k -> v -> Node k v -> Node k v
-updateNode hash key value EmptyNode = LeafNode 0 hash key value
-updateNode hash key value (LeafNode shift storedHash storedKey storedValue)
+
+updateNode :: (Eq k) => Int -> Word32 -> k -> v -> Node k v -> Node k v
+
+updateNode _shift hash key value EmptyNode = LeafNode hash key value
+updateNode shift hash key value (LeafNode storedHash storedKey storedValue)
     | hash == storedHash = if key == storedKey
-                              then (LeafNode shift hash key value) -- key exists
-                              else undefined                 -- TODO: hash collision
-    | otherwise = makeArrayNode (hash, key, value) (storedHash, storedKey, storedValue)
+                              then (LeafNode hash key value) -- key exists; just update
+                              else HashCollisionNode hash [(key, value), (storedKey, storedValue)]
+    | otherwise = makeArrayNode shift (hash, key, value) (storedHash, storedKey, storedValue)
 
-makeArrayNode :: (Eq k) => (Word32, k, v) -> (Word32, k, v) -> Node k v
-makeArrayNode (hash1, key1, value1) (hash2, key2, value2) = undefined
+updateNode shift _hash key value (HashCollisionNode hash pairs) =
+    HashCollisionNode hash ((key,value):pairs)
 
+updateNode shift hash key value (ArrayNode subNodes) =
+    let subHash = hashFragment shift hash
+        newChild = updateNode (shift+shiftStep) hash key value (subNodes!subHash)
+        in ArrayNode $ subNodes // [(subHash, newChild)]
+
+
+makeArrayNode :: (Eq k) => Int -> (Word32, k, v) -> (Word32, k, v) -> Node k v
+
+makeArrayNode shift (hash1, key1, value1) (hash2, key2, value2) =
+    let subHash1 = hashFragment shift hash1
+        subHash2 = hashFragment shift hash2
+        in ArrayNode (listArray (0, mask) [case i of {
+            x | x == subHash1 -> LeafNode hash1 key1 value1;
+            x | x == subHash2 -> LeafNode hash2 key2 value2;
+            otherwise -> EmptyNode } |
+                i <- [0..fromIntegral mask]])
+
+hashFragment shift hash = (hash `shiftR` shift) .&. fromIntegral mask
 
 data (Eq k) => Node k v = EmptyNode |
                           LeafNode {
-                              shift :: Int,
                               hash :: Word32,
                               key :: k,
                               value :: v
                           } |
                           ArrayNode {
-                              shift :: Int,
-                              subNodes :: Array Int (Node k v)
+                              subNodes :: Array Word32 (Node k v)
+                          } |
+                          HashCollisionNode {
+                              hash :: Word32,
+                              pairs :: [(k, v)]
                           }
 
 instance (Eq k, Show k, Show v) => Show (Node k v) where
-    show EmptyNode = "[]"
-    show (LeafNode shift hash key value) = "(" ++ (show key) ++ ", " ++ (show value) ++ ")"
-    show (ArrayNode shift subNodes) = show $ elems subNodes
+    show EmptyNode = ""
+    show (LeafNode _hash key value) = "(" ++ (show key) ++ ", " ++ (show value) ++ ")"
+    show (ArrayNode subNodes) = show $ elems subNodes
+    show (HashCollisionNode _hash pairs) = show pairs
 
+-- Some constants
+shiftStep = 5
+chunk = 2^shiftStep
+mask = pred chunk
+
+-- Bit operations
 
 bitPos :: Word32 -> Int
 bitPos x = bitCount32 $ pred x
