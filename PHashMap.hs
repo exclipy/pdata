@@ -38,21 +38,47 @@ updateNode shift hash key value (ArrayNode subNodes) =
         newChild = updateNode (shift+shiftStep) hash key value (subNodes!subHash)
         in ArrayNode $ subNodes // [(subHash, newChild)]
 
-updateNode shift hash key value (BitmapIndexedNode bitmap subNodes) =
+updateNode shift hash key value bmnode@(BitmapIndexedNode bitmap subNodes) =
+    if bitCount32 bitmap >= chunk `div` 2
+       then makeArrayNode shift hash key value bmnode
+       else let subHash = hashFragment shift hash
+                ix = fromBitmap bitmap subHash
+                bit = toBitmap subHash
+                alreadyExists = (bitmap .&. bit) /= 0
+                oldChild = if alreadyExists then (subNodes ! fromIntegral ix) else EmptyNode
+                newChild = updateNode (shift+shiftStep) hash key value oldChild
+                (left, right) = splitAt ix $ elems subNodes
+                newValues = left ++ if alreadyExists
+                                       then newChild:(tail right)
+                                       else newChild:right
+                newBound = (if alreadyExists then id else succ) $ snd $ bounds subNodes
+                newSubNodes = listArray (0, newBound) newValues
+                newBitmap = bitmap .|. bit
+                in BitmapIndexedNode newBitmap newSubNodes
+
+
+makeBitmapIndexedNode :: (Eq k) => Int -> (Word32, k, v) -> (Word32, k, v) -> Node k v
+
+makeBitmapIndexedNode shift (hash1, key1, value1) (hash2, key2, value2) =
+    let subHash1 = hashFragment shift hash1
+        subHash2 = hashFragment shift hash2
+        node1 = LeafNode hash1 key1 value1
+        node2 = LeafNode hash2 key2 value2
+        (nodeA, nodeB) = if (subHash1 < subHash2)
+                            then (node1, node2)
+                            else (node2, node1)
+        in BitmapIndexedNode ((toBitmap subHash1) .|. (toBitmap subHash2))
+                             $ listArray (0, 1) [nodeA, nodeB]
+
+
+makeArrayNode :: (Eq k) => Int -> Word32 -> k -> v -> Node k v -> Node k v
+
+makeArrayNode shift hash key value (BitmapIndexedNode bitmap subNodes) =
     let subHash = hashFragment shift hash
-        ix = fromBitmap bitmap subHash
-        bit = toBitmap subHash
-        alreadyExists = (bitmap .&. bit) /= 0
-        oldChild = if alreadyExists then (subNodes ! fromIntegral ix) else EmptyNode
-        newChild = updateNode (shift+shiftStep) hash key value oldChild
-        (left, right) = splitAt ix $ elems subNodes
-        newValues = left ++ if alreadyExists
-                               then newChild:(tail right)
-                               else newChild:right
-        newBound = (if alreadyExists then id else succ) $ snd $ bounds subNodes
-        newSubNodes = listArray (0, newBound) newValues
-        newBitmap = bitmap .|. bit
-        in BitmapIndexedNode newBitmap newSubNodes
+        assocs = zip (bitmapToIndices bitmap) (elems subNodes)
+        newAssocs = (subHash, LeafNode hash key value):assocs
+        blank = listArray (0, 31) $ replicate 32 EmptyNode
+        in ArrayNode $ blank // newAssocs
 
 
 index :: (Eq k) => PHashMap k v -> k -> Maybe v
@@ -87,19 +113,6 @@ indexNode shift hash searchKey (BitmapIndexedNode bitmap subNodes) =
               else Nothing
 
 
-makeBitmapIndexedNode :: (Eq k) => Int -> (Word32, k, v) -> (Word32, k, v) -> Node k v
-
-makeBitmapIndexedNode shift (hash1, key1, value1) (hash2, key2, value2) =
-    let subHash1 = hashFragment shift hash1
-        subHash2 = hashFragment shift hash2
-        node1 = LeafNode hash1 key1 value1
-        node2 = LeafNode hash2 key2 value2
-        (nodeA, nodeB) = if (subHash1 < subHash2)
-                            then (node1, node2)
-                            else (node2, node1)
-        in BitmapIndexedNode ((toBitmap subHash1) .|. (toBitmap subHash2))
-                             $ listArray (0, 1) [nodeA, nodeB]
-
 hashFragment shift hash = (hash `shiftR` shift) .&. fromIntegral mask
 
 data (Eq k) => Node k v = EmptyNode |
@@ -122,7 +135,7 @@ data (Eq k) => Node k v = EmptyNode |
 
 instance (Eq k, Show k, Show v) => Show (Node k v) where
     show EmptyNode = ""
-    show (LeafNode _hash key value) = "(" ++ (show key) ++ ", " ++ (show value) ++ ")"
+    show (LeafNode _hash key value) = show (key, value)
     show (ArrayNode subNodes) = "a" ++ (show $ elems subNodes)
     show (HashCollisionNode _hash pairs) = "h" ++ show pairs
     show (BitmapIndexedNode bitmap subNodes) = "b" ++ show bitmap ++ (show $ elems subNodes)
@@ -145,6 +158,13 @@ fromBitmap bitmap subHash = fromIntegral $ bitCount32 $ bitmap .&. (pred (toBitm
 
 toBitmap :: (Bits t, Integral a) => a -> t
 toBitmap subHash = 1 `shiftL` fromIntegral subHash
+
+bitmapToIndices :: (Bits a, Num b) => a -> [b]
+bitmapToIndices bitmap = loop 0 bitmap
+    where loop _ 0  = []
+          loop 32 _ = []
+          loop ix bitmap | bitmap .&. 1 == 0 = loop (ix+1) (bitmap `shiftR` 1)
+                         | otherwise         = ix:(loop (ix+1) (bitmap `shiftR` 1))
 
 bitCount32 :: (Bits a, Integral b) => a -> b
 bitCount32 x = bitCount8 ((x `shiftR` 24) .&. 0xff) +
