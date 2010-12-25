@@ -1,8 +1,8 @@
-module PHashMap where
+module PHashMap (PHashMap, empty, update, index) where
 import Data.Bits
 import Data.Word
 import Data.List
-import Data.Array
+import Data.Array hiding (index)
 
 data (Eq k) => PHashMap k v = PHM {
     hashFn :: k -> Word32,
@@ -28,7 +28,7 @@ updateNode shift hash key value (LeafNode storedHash storedKey storedValue)
     | hash == storedHash = if key == storedKey
                               then (LeafNode hash key value) -- key exists; just update
                               else HashCollisionNode hash [(key, value), (storedKey, storedValue)]
-    | otherwise = makeArrayNode shift (hash, key, value) (storedHash, storedKey, storedValue)
+    | otherwise = makeBitmapIndexedNode shift (hash, key, value) (storedHash, storedKey, storedValue)
 
 updateNode shift _hash key value (HashCollisionNode hash pairs) =
     HashCollisionNode hash ((key,value):pairs)
@@ -38,39 +38,67 @@ updateNode shift hash key value (ArrayNode subNodes) =
         newChild = updateNode (shift+shiftStep) hash key value (subNodes!subHash)
         in ArrayNode $ subNodes // [(subHash, newChild)]
 
+updateNode shift hash key value (BitmapIndexedNode bitmap subNodes) =
+    let subHash = hashFragment shift hash
+        ix = fromBitmap bitmap subHash
+        bit = toBitmap subHash
+        alreadyExists = (bitmap .&. bit) /= 0
+        oldChild = if alreadyExists then (subNodes ! fromIntegral ix) else EmptyNode
+        newChild = updateNode (shift+shiftStep) hash key value oldChild
+        (left, right) = splitAt ix $ elems subNodes
+        newValues = left ++ if alreadyExists
+                               then newChild:(tail right)
+                               else newChild:right
+        newBound = (if alreadyExists then id else succ) $ snd $ bounds subNodes
+        newSubNodes = listArray (0, newBound) newValues
+        newBitmap = bitmap .|. bit
+        in BitmapIndexedNode newBitmap newSubNodes
 
-index :: (Eq k) => PHashMap k v -> k -> v
+
+index :: (Eq k) => PHashMap k v -> k -> Maybe v
 
 index (PHM hashFn root) key = indexNode 0 (hashFn key) key root
 
 
-indexNode :: (Eq k) => Int -> Word32 -> k -> Node k v -> v
+indexNode :: (Eq k) => Int -> Word32 -> k -> Node k v -> Maybe v
 
-indexNode _ _ _ EmptyNode = undefined
+indexNode _ _ _ EmptyNode = Nothing
 
-indexNode _ _ searchKey (LeafNode _ key value) = if searchKey == key then value
-                                                                     else undefined
+indexNode _ _ searchKey (LeafNode _ key value) =
+    if searchKey == key then Just value
+                        else Nothing
+
+indexNode _ _ searchKey (HashCollisionNode _ pairs) =
+    find searchKey pairs
+    where find searchKey [] = Nothing
+          find searchKey ((key, value):pairs) | searchKey == key = Just value
+                                              | otherwise        = find searchKey pairs
+
 indexNode shift hash searchKey (ArrayNode subNodes) =
     let subHash = hashFragment shift hash
         in indexNode (shift+shiftStep) hash searchKey (subNodes!subHash)
 
-indexNode _ _ searchKey (HashCollisionNode _ pairs) =
-    find searchKey pairs
-    where find searchKey [] = undefined
-          find searchKey ((key, value):pairs) | searchKey == key = value
-                                              | otherwise        = find searchKey pairs
+indexNode shift hash searchKey (BitmapIndexedNode bitmap subNodes) =
+    let subHash = hashFragment shift hash
+        ix = fromBitmap bitmap subHash
+        exists = (bitmap .&. (toBitmap subHash)) /= 0
+        in if exists
+              then indexNode (shift+shiftStep) hash searchKey (subNodes!ix)
+              else Nothing
 
 
-makeArrayNode :: (Eq k) => Int -> (Word32, k, v) -> (Word32, k, v) -> Node k v
+makeBitmapIndexedNode :: (Eq k) => Int -> (Word32, k, v) -> (Word32, k, v) -> Node k v
 
-makeArrayNode shift (hash1, key1, value1) (hash2, key2, value2) =
+makeBitmapIndexedNode shift (hash1, key1, value1) (hash2, key2, value2) =
     let subHash1 = hashFragment shift hash1
         subHash2 = hashFragment shift hash2
-        in ArrayNode (listArray (0, mask) [case i of {
-            x | x == subHash1 -> LeafNode hash1 key1 value1;
-            x | x == subHash2 -> LeafNode hash2 key2 value2;
-            otherwise -> EmptyNode } |
-                i <- [0..fromIntegral mask]])
+        node1 = LeafNode hash1 key1 value1
+        node2 = LeafNode hash2 key2 value2
+        (nodeA, nodeB) = if (subHash1 < subHash2)
+                            then (node1, node2)
+                            else (node2, node1)
+        in BitmapIndexedNode ((toBitmap subHash1) .|. (toBitmap subHash2))
+                             $ listArray (0, 1) [nodeA, nodeB]
 
 hashFragment shift hash = (hash `shiftR` shift) .&. fromIntegral mask
 
@@ -86,31 +114,45 @@ data (Eq k) => Node k v = EmptyNode |
                           HashCollisionNode {
                               hash :: Word32,
                               pairs :: [(k, v)]
+                          } |
+                          BitmapIndexedNode {
+                              bitmap :: Word32,
+                              subNodes :: Array Word32 (Node k v)
                           }
 
 instance (Eq k, Show k, Show v) => Show (Node k v) where
     show EmptyNode = ""
     show (LeafNode _hash key value) = "(" ++ (show key) ++ ", " ++ (show value) ++ ")"
-    show (ArrayNode subNodes) = show $ elems subNodes
-    show (HashCollisionNode _hash pairs) = show pairs
+    show (ArrayNode subNodes) = "a" ++ (show $ elems subNodes)
+    show (HashCollisionNode _hash pairs) = "h" ++ show pairs
+    show (BitmapIndexedNode bitmap subNodes) = "b" ++ show bitmap ++ (show $ elems subNodes)
 
 -- Some constants
+shiftStep :: Int
 shiftStep = 5
+
+chunk :: Word32
 chunk = 2^shiftStep
+
+mask :: Word32
 mask = pred chunk
 
 -- Bit operations
 
-bitPos :: Word32 -> Int
-bitPos x = bitCount32 $ pred x
+-- Given a bitmap and a subhash, this function returns the index into the list
+fromBitmap :: (Integral a, Bits a, Integral b, Num c) => a -> b -> c
+fromBitmap bitmap subHash = fromIntegral $ bitCount32 $ bitmap .&. (pred (toBitmap subHash))
 
-bitCount32 :: Word32 -> Int
-bitCount32 x = bitCount8 (fromIntegral (x `shiftR` 24)) +
-               bitCount8 (fromIntegral (x `shiftR` 16)) +
-               bitCount8 (fromIntegral (x `shiftR` 8)) +
-               bitCount8 (fromIntegral x)
+toBitmap :: (Bits t, Integral a) => a -> t
+toBitmap subHash = 1 `shiftL` fromIntegral subHash
 
-bitCount8 :: Word8 -> Int
+bitCount32 :: (Bits a, Integral b) => a -> b
+bitCount32 x = bitCount8 ((x `shiftR` 24) .&. 0xff) +
+               bitCount8 ((x `shiftR` 16) .&. 0xff) +
+               bitCount8 ((x `shiftR` 8) .&. 0xff) +
+               bitCount8 (x .&. 0xff)
+
+bitCount8 :: (Bits a, Integral b) => a -> b
 bitCount8 0 = 0
 bitCount8 1 = 1
 bitCount8 2 = 1
