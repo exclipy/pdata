@@ -1,4 +1,4 @@
-module PHashMap (PHashMap, empty, insert, insertWith, PHashMap.lookup, keys, toList) where
+module PHashMap (PHashMap, empty, insert, insertWith, update, PHashMap.delete, PHashMap.lookup, keys, toList) where
 import Data.Bits
 import Data.Word
 import Data.List hiding (insert, lookup)
@@ -142,6 +142,11 @@ updateNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
         newChild = updateNode (shift+shiftStep) updateFn hash key oldChild
         newSubNodes = subNodes // [(ix, newChild)]
         in BitmapIndexedNode bitmap newSubNodes
+
+
+delete :: (Eq k) => k -> PHashMap k v -> PHashMap k v
+
+delete = update (const Nothing)
 
 
 -- (lookup key hashMap) is Just the value stored at the key, or Nothing if no such key exists
