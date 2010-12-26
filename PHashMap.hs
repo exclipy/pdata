@@ -1,9 +1,9 @@
-module PHashMap (PHashMap, empty, insert, insertWith, lookup, keys, toList) where
+module PHashMap (PHashMap, empty, insert, insertWith, PHashMap.lookup, keys, toList) where
 import Data.Bits
 import Data.Word
 import Data.List hiding (insert, lookup)
 import Data.Array
-import Prelude hiding (lookup)
+import Prelude
 
 data (Eq k) => PHashMap k v = PHM {
     hashFn :: k -> Word32,
@@ -26,28 +26,28 @@ empty hashFn = PHM hashFn EmptyNode
 insertWith :: (Eq k) => (v -> v -> v) -> k -> v -> PHashMap k v -> PHashMap k v
 
 insertWith updateFn key value (PHM hashFn root) =
-    PHM hashFn $ insertNodeWith updateFn 0 (hashFn key) key value root
+    PHM hashFn $ insertNodeWith 0 updateFn (hashFn key) key value root
 
 
-insertNodeWith :: (Eq k) => (v -> v -> v) -> Int -> Word32 -> k -> v -> Node k v -> Node k v
+insertNodeWith :: (Eq k) => Int -> (v -> v -> v) -> Word32 -> k -> v -> Node k v -> Node k v
 
-insertNodeWith _updateFn _shift hash key value EmptyNode = LeafNode hash key value
+insertNodeWith _shift _updateFn hash key value EmptyNode = LeafNode hash key value
 
-insertNodeWith updateFn shift hash key value (LeafNode storedHash storedKey storedValue)
+insertNodeWith shift updateFn hash key value (LeafNode storedHash storedKey storedValue)
     | hash == storedHash = if key == storedKey
                               then (LeafNode hash key (updateFn value storedValue)) -- key exists
                               else HashCollisionNode hash [(key, value), (storedKey, storedValue)]
     | otherwise = makeBitmapIndexedNode shift (hash, key, value) (storedHash, storedKey, storedValue)
 
-insertNodeWith _updateFn shift _hash key value (HashCollisionNode hash pairs) =
-    HashCollisionNode hash ((key,value):pairs)
+insertNodeWith shift _updateFn _hash key value (HashCollisionNode hash pairs) =
+    HashCollisionNode hash ((key,value):pairs) -- TODO: we need to find the existing one and update it!
 
-insertNodeWith updateFn shift hash key value (ArrayNode subNodes) =
+insertNodeWith shift updateFn hash key value (ArrayNode subNodes) =
     let subHash = hashFragment shift hash
-        newChild = insertNodeWith updateFn (shift+shiftStep) hash key value (subNodes!subHash)
+        newChild = insertNodeWith (shift+shiftStep) updateFn hash key value (subNodes!subHash)
         in ArrayNode $ subNodes // [(subHash, newChild)]
 
-insertNodeWith updateFn shift hash key value bmnode@(BitmapIndexedNode bitmap subNodes) =
+insertNodeWith shift updateFn hash key value bmnode@(BitmapIndexedNode bitmap subNodes) =
     if bitCount32 bitmap >= chunk `div` 2
        then makeArrayNode shift hash key value bmnode
        else let subHash = hashFragment shift hash
@@ -55,22 +55,15 @@ insertNodeWith updateFn shift hash key value bmnode@(BitmapIndexedNode bitmap su
                 bit = toBitmap subHash
                 alreadyExists = (bitmap .&. bit) /= 0
                 oldChild = if alreadyExists then (subNodes ! fromIntegral ix) else EmptyNode
-                newChild = insertNodeWith updateFn (shift+shiftStep) hash key value oldChild
+                newChild = insertNodeWith (shift+shiftStep) updateFn hash key value oldChild
                 (left, right) = splitAt ix $ elems subNodes
                 newValues = left ++ if alreadyExists
                                        then newChild:(tail right)
                                        else newChild:right
                 newBound = (if alreadyExists then id else succ) $ snd $ bounds subNodes
-                newSubNodes = listArray (0, newBound) newValues
+                newSubNodes = listArray (0, newBound) newValues -- TODO: possibly use (//) if exists
                 newBitmap = bitmap .|. bit
                 in BitmapIndexedNode newBitmap newSubNodes
-
-
--- (insert key value hashMap) is hashMap with (key, value) inserted, replacing any previous
--- value with the given key.
-insert :: (Eq k) => k -> v -> PHashMap k v -> PHashMap k v
-
-insert = insertWith const
 
 
 makeBitmapIndexedNode :: (Eq k) => Int -> (Word32, k, v) -> (Word32, k, v) -> Node k v
@@ -97,6 +90,60 @@ makeArrayNode shift hash key value (BitmapIndexedNode bitmap subNodes) =
         in ArrayNode $ blank // newAssocs
 
 
+-- (insert key value hashMap) is hashMap with (key, value) inserted, replacing any previous
+-- value with the given key.
+insert :: (Eq k) => k -> v -> PHashMap k v -> PHashMap k v
+
+insert = insertWith const
+
+
+-- (update updateFn key hashMap) is hashMap with the value at key updated using updateFn.
+-- If updateFn returns Nothing, then the key-value pair is removed
+update :: (Eq k) => (v -> Maybe v) -> k -> PHashMap k v -> PHashMap k v
+
+update updateFn key (PHM hashFn root) =
+    PHM hashFn $ updateNode 0 updateFn (hashFn key) key root
+
+
+-- TODO: order of args is inconsistent
+updateNode :: (Eq k) => Int -> (v -> Maybe v) -> Word32 -> k -> Node k v -> Node k v
+
+updateNode _shift _updateFn _hash _key EmptyNode = EmptyNode
+
+updateNode _shift updateFn _hash' key' node@(LeafNode hash key value) =
+    if key == key'
+       then maybe EmptyNode
+                  (LeafNode hash key)
+                  (updateFn value)
+       else node
+
+updateNode _shift updateFn _hash' key (HashCollisionNode hash pairs) =
+    HashCollisionNode hash (updateList updateFn key pairs)
+    where updateList updateFn key [] = []
+          updateList updateFn key' ((key, value):pairs) | key' == key =
+              maybe pairs
+                    (\value' -> (key, value'):pairs)
+                    (updateFn value)
+          updateList updateFn key (_:pairs) =
+              updateList updateFn key pairs
+
+
+updateNode shift updateFn hash key (ArrayNode subNodes) =
+    let subHash = hashFragment shift hash
+        newChild = updateNode (shift+shiftStep) updateFn hash key (subNodes!subHash)
+        in ArrayNode $ subNodes // [(subHash, newChild)]
+
+updateNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
+    let subHash = hashFragment shift hash
+        ix = fromBitmap bitmap subHash
+        bit = toBitmap subHash
+        exists = (bitmap .&. bit) /= 0
+        oldChild = subNodes ! fromIntegral ix
+        newChild = updateNode (shift+shiftStep) updateFn hash key oldChild
+        newSubNodes = subNodes // [(ix, newChild)]
+        in BitmapIndexedNode bitmap newSubNodes
+
+
 -- (lookup key hashMap) is Just the value stored at the key, or Nothing if no such key exists
 lookup :: (Eq k) => k -> PHashMap k v -> Maybe v
 
@@ -112,10 +159,7 @@ lookupNode _ _ searchKey (LeafNode _ key value) =
                         else Nothing
 
 lookupNode _ _ searchKey (HashCollisionNode _ pairs) =
-    find searchKey pairs
-    where find searchKey [] = Nothing
-          find searchKey ((key, value):pairs) | searchKey == key = Just value
-                                              | otherwise        = find searchKey pairs
+    Prelude.lookup searchKey pairs
 
 lookupNode shift hash searchKey (ArrayNode subNodes) =
     let subHash = hashFragment shift hash
