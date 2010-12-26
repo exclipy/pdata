@@ -1,7 +1,7 @@
-module PHashMap (PHashMap, empty, update, index) where
+module PHashMap (PHashMap, empty, insert, index, keys) where
 import Data.Bits
 import Data.Word
-import Data.List
+import Data.List hiding (insert)
 import Data.Array hiding (index)
 
 data (Eq k) => PHashMap k v = PHM {
@@ -17,28 +17,28 @@ empty :: (Eq k) => (k -> Word32) -> PHashMap k v
 empty hashFn = PHM hashFn EmptyNode
 
 
-update :: (Eq k) => k -> v -> PHashMap k v -> PHashMap k v
-update key value (PHM hashFn root) = PHM hashFn $ updateNode 0 (hashFn key) key value root
+insert :: (Eq k) => k -> v -> PHashMap k v -> PHashMap k v
+insert key value (PHM hashFn root) = PHM hashFn $ insertNode 0 (hashFn key) key value root
 
 
-updateNode :: (Eq k) => Int -> Word32 -> k -> v -> Node k v -> Node k v
+insertNode :: (Eq k) => Int -> Word32 -> k -> v -> Node k v -> Node k v
 
-updateNode _shift hash key value EmptyNode = LeafNode hash key value
-updateNode shift hash key value (LeafNode storedHash storedKey storedValue)
+insertNode _shift hash key value EmptyNode = LeafNode hash key value
+insertNode shift hash key value (LeafNode storedHash storedKey storedValue)
     | hash == storedHash = if key == storedKey
-                              then (LeafNode hash key value) -- key exists; just update
+                              then (LeafNode hash key value) -- key exists; just insert
                               else HashCollisionNode hash [(key, value), (storedKey, storedValue)]
     | otherwise = makeBitmapIndexedNode shift (hash, key, value) (storedHash, storedKey, storedValue)
 
-updateNode shift _hash key value (HashCollisionNode hash pairs) =
+insertNode shift _hash key value (HashCollisionNode hash pairs) =
     HashCollisionNode hash ((key,value):pairs)
 
-updateNode shift hash key value (ArrayNode subNodes) =
+insertNode shift hash key value (ArrayNode subNodes) =
     let subHash = hashFragment shift hash
-        newChild = updateNode (shift+shiftStep) hash key value (subNodes!subHash)
+        newChild = insertNode (shift+shiftStep) hash key value (subNodes!subHash)
         in ArrayNode $ subNodes // [(subHash, newChild)]
 
-updateNode shift hash key value bmnode@(BitmapIndexedNode bitmap subNodes) =
+insertNode shift hash key value bmnode@(BitmapIndexedNode bitmap subNodes) =
     if bitCount32 bitmap >= chunk `div` 2
        then makeArrayNode shift hash key value bmnode
        else let subHash = hashFragment shift hash
@@ -46,7 +46,7 @@ updateNode shift hash key value bmnode@(BitmapIndexedNode bitmap subNodes) =
                 bit = toBitmap subHash
                 alreadyExists = (bitmap .&. bit) /= 0
                 oldChild = if alreadyExists then (subNodes ! fromIntegral ix) else EmptyNode
-                newChild = updateNode (shift+shiftStep) hash key value oldChild
+                newChild = insertNode (shift+shiftStep) hash key value oldChild
                 (left, right) = splitAt ix $ elems subNodes
                 newValues = left ++ if alreadyExists
                                        then newChild:(tail right)
@@ -113,6 +113,24 @@ indexNode shift hash searchKey (BitmapIndexedNode bitmap subNodes) =
               else Nothing
 
 
+keys :: (Eq k) => PHashMap k v -> [k]
+
+keys (PHM _hashFn root) = keysNode root
+
+
+keysNode :: (Eq k) => Node k v -> [k]
+
+keysNode EmptyNode = []
+
+keysNode (LeafNode _hash key _value) = [key]
+
+keysNode (HashCollisionNode _hash pairs) =
+    map fst pairs
+
+keysNode (ArrayNode subNodes) =
+    concat $ map keysNode $ elems subNodes
+
+
 hashFragment shift hash = (hash `shiftR` shift) .&. fromIntegral mask
 
 data (Eq k) => Node k v = EmptyNode |
@@ -121,12 +139,12 @@ data (Eq k) => Node k v = EmptyNode |
                               key :: k,
                               value :: v
                           } |
-                          ArrayNode {
-                              subNodes :: Array Word32 (Node k v)
-                          } |
                           HashCollisionNode {
                               hash :: Word32,
                               pairs :: [(k, v)]
+                          } |
+                          ArrayNode {
+                              subNodes :: Array Word32 (Node k v)
                           } |
                           BitmapIndexedNode {
                               bitmap :: Word32,
