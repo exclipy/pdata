@@ -17,28 +17,31 @@ empty :: (Eq k) => (k -> Word32) -> PHashMap k v
 empty hashFn = PHM hashFn EmptyNode
 
 
-insert :: (Eq k) => k -> v -> PHashMap k v -> PHashMap k v
-insert key value (PHM hashFn root) = PHM hashFn $ insertNode 0 (hashFn key) key value root
+insertWith :: (Eq k) => (v -> v -> v) -> k -> v -> PHashMap k v -> PHashMap k v
+
+insertWith updateFn key value (PHM hashFn root) =
+    PHM hashFn $ insertNodeWith updateFn 0 (hashFn key) key value root
 
 
-insertNode :: (Eq k) => Int -> Word32 -> k -> v -> Node k v -> Node k v
+insertNodeWith :: (Eq k) => (v -> v -> v) -> Int -> Word32 -> k -> v -> Node k v -> Node k v
 
-insertNode _shift hash key value EmptyNode = LeafNode hash key value
-insertNode shift hash key value (LeafNode storedHash storedKey storedValue)
+insertNodeWith _updateFn _shift hash key value EmptyNode = LeafNode hash key value
+
+insertNodeWith updateFn shift hash key value (LeafNode storedHash storedKey storedValue)
     | hash == storedHash = if key == storedKey
-                              then (LeafNode hash key value) -- key exists; just insert
+                              then (LeafNode hash key (updateFn value storedValue)) -- key exists
                               else HashCollisionNode hash [(key, value), (storedKey, storedValue)]
     | otherwise = makeBitmapIndexedNode shift (hash, key, value) (storedHash, storedKey, storedValue)
 
-insertNode shift _hash key value (HashCollisionNode hash pairs) =
+insertNodeWith _updateFn shift _hash key value (HashCollisionNode hash pairs) =
     HashCollisionNode hash ((key,value):pairs)
 
-insertNode shift hash key value (ArrayNode subNodes) =
+insertNodeWith updateFn shift hash key value (ArrayNode subNodes) =
     let subHash = hashFragment shift hash
-        newChild = insertNode (shift+shiftStep) hash key value (subNodes!subHash)
+        newChild = insertNodeWith updateFn (shift+shiftStep) hash key value (subNodes!subHash)
         in ArrayNode $ subNodes // [(subHash, newChild)]
 
-insertNode shift hash key value bmnode@(BitmapIndexedNode bitmap subNodes) =
+insertNodeWith updateFn shift hash key value bmnode@(BitmapIndexedNode bitmap subNodes) =
     if bitCount32 bitmap >= chunk `div` 2
        then makeArrayNode shift hash key value bmnode
        else let subHash = hashFragment shift hash
@@ -46,7 +49,7 @@ insertNode shift hash key value bmnode@(BitmapIndexedNode bitmap subNodes) =
                 bit = toBitmap subHash
                 alreadyExists = (bitmap .&. bit) /= 0
                 oldChild = if alreadyExists then (subNodes ! fromIntegral ix) else EmptyNode
-                newChild = insertNode (shift+shiftStep) hash key value oldChild
+                newChild = insertNodeWith updateFn (shift+shiftStep) hash key value oldChild
                 (left, right) = splitAt ix $ elems subNodes
                 newValues = left ++ if alreadyExists
                                        then newChild:(tail right)
@@ -55,6 +58,11 @@ insertNode shift hash key value bmnode@(BitmapIndexedNode bitmap subNodes) =
                 newSubNodes = listArray (0, newBound) newValues
                 newBitmap = bitmap .|. bit
                 in BitmapIndexedNode newBitmap newSubNodes
+
+
+insert :: (Eq k) => k -> v -> PHashMap k v -> PHashMap k v
+
+insert = insertWith const
 
 
 makeBitmapIndexedNode :: (Eq k) => Int -> (Word32, k, v) -> (Word32, k, v) -> Node k v
