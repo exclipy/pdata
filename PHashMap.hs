@@ -1,4 +1,4 @@
-module PHashMap (PHashMap, empty, insert, lookup, keys) where
+module PHashMap (PHashMap, empty, insert, insertWith, lookup, keys) where
 import Data.Bits
 import Data.Word
 import Data.List hiding (insert, lookup)
