@@ -14,10 +14,15 @@ instance (Eq k, Show k, Show v) => Show (PHashMap k v) where
     show (PHM _hashFn root) = show root
 
 
+-- (empty hashFn) is the empty PHashMap, with hashFn being the key hash function
 empty :: (Eq k) => (k -> Word32) -> PHashMap k v
+
 empty hashFn = PHM hashFn EmptyNode
 
 
+-- (insertWith updateFn key value hashMap) is hashMap with (key, value) inserted using accumulation
+-- function updateFn.  If value v1 is inserted with the same key as an existing value v2, the new
+-- value will be v1 `updateFn` v2
 insertWith :: (Eq k) => (v -> v -> v) -> k -> v -> PHashMap k v -> PHashMap k v
 
 insertWith updateFn key value (PHM hashFn root) =
@@ -61,6 +66,8 @@ insertNodeWith updateFn shift hash key value bmnode@(BitmapIndexedNode bitmap su
                 in BitmapIndexedNode newBitmap newSubNodes
 
 
+-- (insert key value hashMap) is hashMap with (key, value) inserted, replacing any previous
+-- value with the given key.
 insert :: (Eq k) => k -> v -> PHashMap k v -> PHashMap k v
 
 insert = insertWith const
@@ -90,38 +97,40 @@ makeArrayNode shift hash key value (BitmapIndexedNode bitmap subNodes) =
         in ArrayNode $ blank // newAssocs
 
 
+-- (lookup key hashMap) is Just the value stored at the key, or Nothing if no such key exists
 lookup :: (Eq k) => k -> PHashMap k v -> Maybe v
 
-lookup key (PHM hashFn root) = indexNode 0 (hashFn key) key root
+lookup key (PHM hashFn root) = lookupNode 0 (hashFn key) key root
 
 
-indexNode :: (Eq k) => Int -> Word32 -> k -> Node k v -> Maybe v
+lookupNode :: (Eq k) => Int -> Word32 -> k -> Node k v -> Maybe v
 
-indexNode _ _ _ EmptyNode = Nothing
+lookupNode _ _ _ EmptyNode = Nothing
 
-indexNode _ _ searchKey (LeafNode _ key value) =
+lookupNode _ _ searchKey (LeafNode _ key value) =
     if searchKey == key then Just value
                         else Nothing
 
-indexNode _ _ searchKey (HashCollisionNode _ pairs) =
+lookupNode _ _ searchKey (HashCollisionNode _ pairs) =
     find searchKey pairs
     where find searchKey [] = Nothing
           find searchKey ((key, value):pairs) | searchKey == key = Just value
                                               | otherwise        = find searchKey pairs
 
-indexNode shift hash searchKey (ArrayNode subNodes) =
+lookupNode shift hash searchKey (ArrayNode subNodes) =
     let subHash = hashFragment shift hash
-        in indexNode (shift+shiftStep) hash searchKey (subNodes!subHash)
+        in lookupNode (shift+shiftStep) hash searchKey (subNodes!subHash)
 
-indexNode shift hash searchKey (BitmapIndexedNode bitmap subNodes) =
+lookupNode shift hash searchKey (BitmapIndexedNode bitmap subNodes) =
     let subHash = hashFragment shift hash
         ix = fromBitmap bitmap subHash
         exists = (bitmap .&. (toBitmap subHash)) /= 0
         in if exists
-              then indexNode (shift+shiftStep) hash searchKey (subNodes!ix)
+              then lookupNode (shift+shiftStep) hash searchKey (subNodes!ix)
               else Nothing
 
 
+-- (toList hashMap) is all the key-value pairs in hashMap as a list
 toList :: (Eq k) => PHashMap k v -> [(k, v)]
 
 toList (PHM _hashFn root) = toListNode root
@@ -142,6 +151,7 @@ toListNode (BitmapIndexedNode _bitmap subNodes) =
     concat $ map toListNode $ elems subNodes
 
 
+-- (keys hashMap) is a list of all keys in hashMap
 keys :: (Eq k) => PHashMap k v -> [k]
 
 keys (PHM _hashFn root) = keysNode root
