@@ -139,6 +139,9 @@ keysNode (HashCollisionNode _hash pairs) =
 keysNode (ArrayNode subNodes) =
     concat $ map keysNode $ elems subNodes
 
+keysNode (BitmapIndexedNode _bitmap subNodes) =
+    concat $ map keysNode $ elems subNodes
+
 
 hashFragment shift hash = (hash `shiftR` shift) .&. fromIntegral mask
 
