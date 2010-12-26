@@ -7,6 +7,6 @@ main = let hashFn = fromIntegral.(`mod` 64)
            hmaps = zipWith (\hm i -> insert i i hm)
                            ((empty hashFn):hmaps)
                            indices
-           values = map (index (last hmaps)) indices
+           values = map (flip PHashMap.lookup (last hmaps)) indices
            in do forM_ hmaps (print.show)
                  print values

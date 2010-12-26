@@ -1,8 +1,9 @@
-module PHashMap (PHashMap, empty, insert, index, keys) where
+module PHashMap (PHashMap, empty, insert, lookup, keys) where
 import Data.Bits
 import Data.Word
-import Data.List hiding (insert)
-import Data.Array hiding (index)
+import Data.List hiding (insert, lookup)
+import Data.Array
+import Prelude hiding (lookup)
 
 data (Eq k) => PHashMap k v = PHM {
     hashFn :: k -> Word32,
@@ -89,9 +90,9 @@ makeArrayNode shift hash key value (BitmapIndexedNode bitmap subNodes) =
         in ArrayNode $ blank // newAssocs
 
 
-index :: (Eq k) => PHashMap k v -> k -> Maybe v
+lookup :: (Eq k) => k -> PHashMap k v -> Maybe v
 
-index (PHM hashFn root) key = indexNode 0 (hashFn key) key root
+lookup key (PHM hashFn root) = indexNode 0 (hashFn key) key root
 
 
 indexNode :: (Eq k) => Int -> Word32 -> k -> Node k v -> Maybe v
