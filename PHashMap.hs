@@ -1,4 +1,4 @@
-module PHashMap (PHashMap, empty, insert, insertWith, lookup, keys) where
+module PHashMap (PHashMap, empty, insert, insertWith, lookup, keys, toList) where
 import Data.Bits
 import Data.Word
 import Data.List hiding (insert, lookup)
@@ -120,6 +120,26 @@ indexNode shift hash searchKey (BitmapIndexedNode bitmap subNodes) =
         in if exists
               then indexNode (shift+shiftStep) hash searchKey (subNodes!ix)
               else Nothing
+
+
+toList :: (Eq k) => PHashMap k v -> [(k, v)]
+
+toList (PHM _hashFn root) = toListNode root
+
+
+toListNode :: (Eq k) => Node k v -> [(k, v)]
+
+toListNode EmptyNode = []
+
+toListNode (LeafNode _hash key value) = [(key, value)]
+
+toListNode (HashCollisionNode _hash pairs) = pairs
+
+toListNode (ArrayNode subNodes) =
+    concat $ map toListNode $ elems subNodes
+
+toListNode (BitmapIndexedNode _bitmap subNodes) =
+    concat $ map toListNode $ elems subNodes
 
 
 keys :: (Eq k) => PHashMap k v -> [k]
