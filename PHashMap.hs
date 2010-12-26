@@ -132,7 +132,7 @@ updateNode _shift updateFn _hash' key (HashCollisionNode hash pairs) =
               updateList updateFn key pairs
 
 
-updateNode shift updateFn hash key (ArrayNode numChildren subNodes) =
+updateNode shift updateFn hash key node@(ArrayNode numChildren subNodes) =
     let subHash = hashFragment shift hash
         child = subNodes ! subHash
         child' = updateNode (shift+shiftStep) updateFn hash key child
@@ -140,7 +140,10 @@ updateNode shift updateFn hash key (ArrayNode numChildren subNodes) =
         numChildren' = if removed
                           then numChildren - 1
                           else numChildren
-        in ArrayNode numChildren' $ subNodes // [(subHash, child')]
+        in if numChildren' < fromIntegral chunk `div` 4
+              then packArrayNode shift hash node
+              else ArrayNode numChildren' $ subNodes // [(subHash, child')]
+
 
 updateNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
     let subHash = hashFragment shift hash
@@ -162,6 +165,19 @@ updateNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
               then EmptyNode
               else BitmapIndexedNode bitmap' subNodes'
 
+
+packArrayNode :: (Eq k) => Int -> Word32 -> Node k v -> Node k v
+
+packArrayNode shift hash (ArrayNode numChildren subNodes) =
+    let subHashToRemove = hashFragment shift hash
+        elems' = map (\i -> if i == subHashToRemove
+                               then EmptyNode
+                               else subNodes ! i)
+                     [0..pred chunk]
+        subNodes' = listArray (0, fromIntegral (numChildren-2)) $ filter (not.nodeIsEmpty) elems'
+        listToBitmap = foldr (\on bm -> (bm `shiftL` 1) .|. (if on then 1 else 0)) 0
+        bitmap = listToBitmap $ map (not.nodeIsEmpty) elems'
+        in BitmapIndexedNode bitmap subNodes'
 
 nodeIsEmpty :: Node k v -> Bool
 
