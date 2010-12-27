@@ -5,6 +5,7 @@ module PHashMap (PHashMap,
                  update,
                  PHashMap.delete,
                  PHashMap.lookup,
+                 member,
                  keys,
                  toList) where
 
@@ -230,6 +231,11 @@ lookupNode shift hash searchKey (BitmapIndexedNode bitmap subNodes) =
 lookupNode shift hash searchKey (ArrayNode _numChildren subNodes) =
     let subHash = hashFragment shift hash
         in lookupNode (shift+shiftStep) hash searchKey (subNodes!subHash)
+
+
+member :: (Eq k) => k -> PHashMap k v -> Bool
+
+member k hashMap = maybe False (const True) (PHashMap.lookup k hashMap)
 
 
 -- (toList hashMap) is all the key-value pairs in hashMap as a list
