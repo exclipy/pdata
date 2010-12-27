@@ -1,4 +1,13 @@
-module PHashMap (PHashMap, empty, insert, insertWith, update, PHashMap.delete, PHashMap.lookup, keys, toList) where
+module PHashMap (PHashMap,
+                 empty,
+                 insert,
+                 insertWith,
+                 update,
+                 PHashMap.delete,
+                 PHashMap.lookup,
+                 keys,
+                 toList) where
+
 import Data.Bits
 import Data.Word
 import Data.List hiding (insert, lookup)
@@ -33,14 +42,19 @@ insertNodeWith :: (Eq k) => Int -> (v -> v -> v) -> Word32 -> k -> v -> Node k v
 
 insertNodeWith _shift _updateFn hash key value EmptyNode = LeafNode hash key value
 
-insertNodeWith shift updateFn hash key value (LeafNode storedHash storedKey storedValue)
-    | hash == storedHash = if key == storedKey
-                              then (LeafNode hash key (updateFn value storedValue)) -- key exists
-                              else HashCollisionNode hash [(key, value), (storedKey, storedValue)]
-    | otherwise = makeBitmapIndexedNode shift (hash, key, value) (storedHash, storedKey, storedValue)
+insertNodeWith shift updateFn hash' key' value' (LeafNode hash key value)
+    | hash' == hash = if key' == key
+                              then (LeafNode hash' key' (updateFn value' value)) -- key' exists
+                              else HashCollisionNode hash' [(key, value), (key', value')]
+    | otherwise = makeBitmapIndexedNode shift (hash, key, value) (hash', key', value')
 
-insertNodeWith shift _updateFn _hash key value (HashCollisionNode hash pairs) =
-    HashCollisionNode hash ((key,value):pairs) -- TODO: we need to find the existing one and update it!
+insertNodeWith _shift updateFn _hash key value (HashCollisionNode hash pairs) =
+    let pairs' = insertPairsWith updateFn key value pairs
+        in HashCollisionNode hash pairs'
+        where insertPairsWith _ key value [] = [(key, value)]
+              insertPairsWith updateFn key' value' ((key, value):pairs)
+                  | key' == key = (key', value') : pairs
+                  | otherwise   = (key, value) : insertPairsWith updateFn key' value' pairs
 
 insertNodeWith shift updateFn hash key value (ArrayNode numChildren subNodes) =
     let subHash = hashFragment shift hash
