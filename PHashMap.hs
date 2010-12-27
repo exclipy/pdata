@@ -10,13 +10,13 @@ module PHashMap (PHashMap,
                  toList) where
 
 import Data.Bits
-import Data.Word
+import Data.Int
 import Data.List hiding (insert, lookup)
 import Data.Array
 import Prelude
 
 data (Eq k) => PHashMap k v = PHM {
-    hashFn :: k -> Word32,
+    hashFn :: k -> Int32,
     root :: Node k v
 }
 
@@ -25,7 +25,7 @@ instance (Eq k, Show k, Show v) => Show (PHashMap k v) where
 
 
 -- (empty hashFn) is the empty PHashMap, with hashFn being the key hash function
-empty :: (Eq k) => (k -> Word32) -> PHashMap k v
+empty :: (Eq k) => (k -> Int32) -> PHashMap k v
 
 empty hashFn = PHM hashFn EmptyNode
 
@@ -39,7 +39,7 @@ insertWith updateFn key value (PHM hashFn root) =
     PHM hashFn $ insertNodeWith 0 updateFn (hashFn key) key value root
 
 
-insertNodeWith :: (Eq k) => Int -> (v -> v -> v) -> Word32 -> k -> v -> Node k v -> Node k v
+insertNodeWith :: (Eq k) => Int -> (v -> v -> v) -> Int32 -> k -> v -> Node k v -> Node k v
 
 insertNodeWith _shift _updateFn hash key value EmptyNode = LeafNode hash key value
 
@@ -50,7 +50,7 @@ insertNodeWith shift updateFn hash' key' value' (LeafNode hash key value)
     | otherwise = expandLeafNode shift (hash, key, value) (hash', key', value')
 
     where
-    expandLeafNode :: (Eq k) => Int -> (Word32, k, v) -> (Word32, k, v) -> Node k v
+    expandLeafNode :: (Eq k) => Int -> (Int32, k, v) -> (Int32, k, v) -> Node k v
     expandLeafNode shift (hash1, key1, value1) (hash2, key2, value2) =
         let subHash1 = hashFragment shift hash1
             subHash2 = hashFragment shift hash2
@@ -92,7 +92,7 @@ insertNodeWith shift updateFn hash key value bmnode@(BitmapIndexedNode bitmap su
                 in BitmapIndexedNode bitmap' subNodes'
     where
     expandBitmapNode :: (Eq k) =>
-        Int -> Word32 -> k -> v -> Word32 -> Array Word32 (Node k v) -> Node k v
+        Int -> Int32 -> k -> v -> Int32 -> Array Int32 (Node k v) -> Node k v
     expandBitmapNode shift hash key value bitmap subNodes =
         let subHash = hashFragment shift hash
             assocs = zip (bitmapToIndices bitmap) (elems subNodes)
@@ -124,7 +124,7 @@ update updateFn key (PHM hashFn root) =
     PHM hashFn $ updateNode 0 updateFn (hashFn key) key root
 
 
-updateNode :: (Eq k) => Int -> (v -> Maybe v) -> Word32 -> k -> Node k v -> Node k v
+updateNode :: (Eq k) => Int -> (v -> Maybe v) -> Int32 -> k -> Node k v -> Node k v
 
 updateNode _shift _updateFn _hash _key EmptyNode = EmptyNode
 
@@ -179,7 +179,7 @@ updateNode shift updateFn hash key node@(ArrayNode numChildren subNodes) =
               then packArrayNode subHash numChildren subNodes
               else ArrayNode numChildren' $ subNodes // [(subHash, child')]
     where
-    packArrayNode :: (Eq k) => Word32 -> Int -> Array Word32 (Node k v) -> Node k v
+    packArrayNode :: (Eq k) => Int32 -> Int -> Array Int32 (Node k v) -> Node k v
     packArrayNode subHashToRemove numChildren subNodes =
         let elems' = map (\i -> if i == subHashToRemove
                                    then EmptyNode
@@ -209,7 +209,7 @@ lookup :: (Eq k) => k -> PHashMap k v -> Maybe v
 lookup key (PHM hashFn root) = lookupNode 0 (hashFn key) key root
 
 
-lookupNode :: (Eq k) => Int -> Word32 -> k -> Node k v -> Maybe v
+lookupNode :: (Eq k) => Int -> Int32 -> k -> Node k v -> Maybe v
 
 lookupNode _ _ _ EmptyNode = Nothing
 
@@ -260,7 +260,7 @@ toListNode (ArrayNode _numChildren subNodes) =
 
 
 -- (fromList hashFn list) is a PHashMap equivalent to list interpreted as a dictionary
-fromList :: (Eq k) => (k -> Word32) -> [(k, v)] -> PHashMap k v
+fromList :: (Eq k) => (k -> Int32) -> [(k, v)] -> PHashMap k v
 
 fromList hashFn = foldl' (\hm (key, value) -> insert key value hm)
                          (empty hashFn)
@@ -293,21 +293,21 @@ hashFragment shift hash = (hash `shiftR` shift) .&. fromIntegral mask
 
 data (Eq k) => Node k v = EmptyNode |
                           LeafNode {
-                              hash :: Word32,
+                              hash :: Int32,
                               key :: k,
                               value :: v
                           } |
                           HashCollisionNode {
-                              hash :: Word32,
+                              hash :: Int32,
                               pairs :: [(k, v)]
                           } |
                           BitmapIndexedNode {
-                              bitmap :: Word32,
-                              subNodes :: Array Word32 (Node k v)
+                              bitmap :: Int32,
+                              subNodes :: Array Int32 (Node k v)
                           } |
                           ArrayNode {
                               numChildren :: Int,
-                              subNodes :: Array Word32 (Node k v)
+                              subNodes :: Array Int32 (Node k v)
                           }
 
 instance (Eq k, Show k, Show v) => Show (Node k v) where
@@ -321,10 +321,10 @@ instance (Eq k, Show k, Show v) => Show (Node k v) where
 shiftStep :: Int
 shiftStep = 5
 
-chunk :: Word32
+chunk :: Int32
 chunk = 2^shiftStep
 
-mask :: Word32
+mask :: Int32
 mask = pred chunk
 
 -- Bit operations
