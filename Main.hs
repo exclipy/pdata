@@ -3,7 +3,7 @@ import PHashMap
 import Data.Word
 
 main = let hashFn = fromIntegral.(`mod` 64)
-           indices = [0,64,128,64]
+           indices = [0,64,32]
            hmaps = zipWith (\hm i -> insert i i hm)
                            ((empty hashFn):hmaps)
                            indices
