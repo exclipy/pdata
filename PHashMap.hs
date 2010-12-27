@@ -213,24 +213,24 @@ lookupNode :: (Eq k) => Int -> Word32 -> k -> Node k v -> Maybe v
 
 lookupNode _ _ _ EmptyNode = Nothing
 
-lookupNode _ _ searchKey (LeafNode _ key value) =
-    if searchKey == key then Just value
+lookupNode _ _ key' (LeafNode _ key value) =
+    if key' == key then Just value
                         else Nothing
 
-lookupNode _ _ searchKey (HashCollisionNode _ pairs) =
-    Prelude.lookup searchKey pairs
+lookupNode _ _ key (HashCollisionNode _ pairs) =
+    Prelude.lookup key pairs
 
-lookupNode shift hash searchKey (BitmapIndexedNode bitmap subNodes) =
+lookupNode shift hash key (BitmapIndexedNode bitmap subNodes) =
     let subHash = hashFragment shift hash
         ix = fromBitmap bitmap subHash
         exists = (bitmap .&. (toBitmap subHash)) /= 0
         in if exists
-              then lookupNode (shift+shiftStep) hash searchKey (subNodes!ix)
+              then lookupNode (shift+shiftStep) hash key (subNodes!ix)
               else Nothing
 
-lookupNode shift hash searchKey (ArrayNode _numChildren subNodes) =
+lookupNode shift hash key (ArrayNode _numChildren subNodes) =
     let subHash = hashFragment shift hash
-        in lookupNode (shift+shiftStep) hash searchKey (subNodes!subHash)
+        in lookupNode (shift+shiftStep) hash key (subNodes!subHash)
 
 
 member :: (Eq k) => k -> PHashMap k v -> Bool
@@ -257,6 +257,14 @@ toListNode (BitmapIndexedNode _bitmap subNodes) =
 
 toListNode (ArrayNode _numChildren subNodes) =
     concat $ map toListNode $ elems subNodes
+
+
+-- (fromList hashFn list) is a PHashMap equivalent to list interpreted as a dictionary
+fromList :: (Eq k) => (k -> Word32) -> [(k, v)] -> PHashMap k v
+
+fromList hashFn = foldl' (\hm (key, value) -> insert key value hm)
+                         (empty hashFn)
+                  -- TODO: make this more efficient by using a transient array
 
 
 -- (keys hashMap) is a list of all keys in hashMap
