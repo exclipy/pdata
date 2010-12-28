@@ -153,8 +153,8 @@ updateNode _shift updateFn _hash' key (HashCollisionNode hash pairs) =
               maybe pairs
                     (\value' -> (key, value'):pairs)
                     (updateFn value)
-          updateList updateFn key (_:pairs) =
-              updateList updateFn key pairs
+          updateList updateFn key (p:pairs) =
+              p : updateList updateFn key pairs
     -- TODO: collapse to a LeafNode
 
 updateNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
