@@ -8,7 +8,7 @@ module PHashMap (PHashMap,
                  PHashMap.lookup,
                  member,
                  keys,
-                 elems,
+                 PHashMap.elems,
                  toList,
                  fromList) where
 
@@ -322,45 +322,13 @@ fromList hashFn = foldl' (\hm (key, value) -> insert key value hm)
 -- (keys hashMap) is a list of all keys in hashMap
 keys :: (Eq k) => PHashMap k v -> [k]
 
-keys (PHM _hashFn root) = keysNode root
-
-
-keysNode :: (Eq k) => Node k v -> [k]
-
-keysNode EmptyNode = []
-
-keysNode (LeafNode _hash key _value) = [key]
-
-keysNode (HashCollisionNode _hash pairs) =
-    map fst pairs
-
-keysNode (BitmapIndexedNode _bitmap subNodes) =
-    concat $ map keysNode $ A.elems subNodes
-
-keysNode (ArrayNode _numChildren subNodes) =
-    concat $ map keysNode $ A.elems subNodes
+keys = (map fst).toList
 
 
 -- (elems hashMap) is a list of all values in hashMap
 elems :: (Eq k) => PHashMap k v -> [v]
 
-elems (PHM _hashFn root) = elemsNode root
-
-
-elemsNode :: (Eq k) => Node k v -> [v]
-
-elemsNode EmptyNode = []
-
-elemsNode (LeafNode _hash _key value) = [value]
-
-elemsNode (HashCollisionNode _hash pairs) =
-    map snd pairs
-
-elemsNode (BitmapIndexedNode _bitmap subNodes) =
-    concat $ map elemsNode $ A.elems subNodes
-
-elemsNode (ArrayNode _numChildren subNodes) =
-    concat $ map elemsNode $ A.elems subNodes
+elems = (map snd).toList
 
 
 -- Some miscellaneous helper functions
