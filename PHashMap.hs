@@ -8,14 +8,15 @@ module PHashMap (PHashMap,
                  PHashMap.lookup,
                  member,
                  keys,
+                 elems,
                  toList,
                  fromList) where
 
 import Data.Bits
 import Data.Int
 import Data.List hiding (insert, lookup)
-import Data.Array
-import Prelude
+import Data.Array as A
+import Prelude as P
 import Control.Monad
 
 -- Some constants
@@ -60,8 +61,8 @@ instance (Eq k, Show k, Show v) => Show (Node k v) where
     show EmptyNode = ""
     show (LeafNode _hash key value) = show (key, value)
     show (HashCollisionNode _hash pairs) = "h" ++ show pairs
-    show (BitmapIndexedNode bitmap subNodes) = "b" ++ show bitmap ++ (show $ elems subNodes)
-    show (ArrayNode numChildren subNodes) = "a" ++ show numChildren ++ (show $ elems subNodes)
+    show (BitmapIndexedNode bitmap subNodes) = "b" ++ show bitmap ++ (show $ A.elems subNodes)
+    show (ArrayNode numChildren subNodes) = "a" ++ show numChildren ++ (show $ A.elems subNodes)
 
 
 -- (empty hashFn) is the empty PHashMap, with hashFn being the key hash function
@@ -173,7 +174,7 @@ alterNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
                       Modified -> bound
                       Nil      -> bound
                       Added    -> bound+1
-        (left, right) = splitAt ix $ elems subNodes
+        (left, right) = splitAt ix $ A.elems subNodes
         subNodes' = case change of
                          Removed  -> listArray (0, bound') $ left ++ (tail right)
                          Modified -> subNodes // [(fromIntegral ix, child')]
@@ -203,7 +204,7 @@ alterNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
     expandBitmapNode :: (Eq k) =>
         Int -> Int32 -> Node k v -> Int32 -> Array Int32 (Node k v) -> Node k v
     expandBitmapNode shift subHash node' bitmap subNodes =
-        let assocs = zip (bitmapToIndices bitmap) (elems subNodes)
+        let assocs = zip (bitmapToIndices bitmap) (A.elems subNodes)
             assocs' = (subHash, node'):assocs
             blank = listArray (0, 31) $ replicate 32 EmptyNode
             numChildren = (bitCount32 bitmap) + 1
@@ -269,7 +270,7 @@ lookupNode _ _ key' (LeafNode _ key value) =
                         else Nothing
 
 lookupNode _ _ key (HashCollisionNode _ pairs) =
-    Prelude.lookup key pairs
+    P.lookup key pairs
 
 lookupNode shift hash key (BitmapIndexedNode bitmap subNodes) =
     let subHash = hashFragment shift hash
@@ -304,10 +305,10 @@ toListNode (LeafNode _hash key value) = [(key, value)]
 toListNode (HashCollisionNode _hash pairs) = pairs
 
 toListNode (BitmapIndexedNode _bitmap subNodes) =
-    concat $ map toListNode $ elems subNodes
+    concat $ map toListNode $ A.elems subNodes
 
 toListNode (ArrayNode _numChildren subNodes) =
-    concat $ map toListNode $ elems subNodes
+    concat $ map toListNode $ A.elems subNodes
 
 
 -- (fromList hashFn list) is a PHashMap equivalent to list interpreted as a dictionary
@@ -334,10 +335,32 @@ keysNode (HashCollisionNode _hash pairs) =
     map fst pairs
 
 keysNode (BitmapIndexedNode _bitmap subNodes) =
-    concat $ map keysNode $ elems subNodes
+    concat $ map keysNode $ A.elems subNodes
 
 keysNode (ArrayNode _numChildren subNodes) =
-    concat $ map keysNode $ elems subNodes
+    concat $ map keysNode $ A.elems subNodes
+
+
+-- (elems hashMap) is a list of all values in hashMap
+elems :: (Eq k) => PHashMap k v -> [v]
+
+elems (PHM _hashFn root) = elemsNode root
+
+
+elemsNode :: (Eq k) => Node k v -> [v]
+
+elemsNode EmptyNode = []
+
+elemsNode (LeafNode _hash _key value) = [value]
+
+elemsNode (HashCollisionNode _hash pairs) =
+    map snd pairs
+
+elemsNode (BitmapIndexedNode _bitmap subNodes) =
+    concat $ map elemsNode $ A.elems subNodes
+
+elemsNode (ArrayNode _numChildren subNodes) =
+    concat $ map elemsNode $ A.elems subNodes
 
 
 -- Some miscellaneous helper functions
