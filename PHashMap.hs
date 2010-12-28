@@ -254,6 +254,11 @@ delete :: (Eq k) => k -> PHashMap k v -> PHashMap k v
 delete = update (const Nothing)
 
 
+adjust :: (Eq k) => (v -> v) -> k -> PHashMap k v -> PHashMap k v
+
+adjust updateFn = update ((Just).updateFn)
+
+
 -- (lookup key hashMap) is Just the value stored at the key, or Nothing if no such key exists
 lookup :: (Eq k) => k -> PHashMap k v -> Maybe v
 
