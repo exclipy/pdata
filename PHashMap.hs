@@ -16,13 +16,50 @@ import Data.List hiding (insert, lookup)
 import Data.Array
 import Prelude
 
+-- Some constants
+shiftStep :: Int
+shiftStep = 5
+
+chunk :: Int32
+chunk = 2^shiftStep
+
+mask :: Int32
+mask = pred chunk
+
+
 data (Eq k) => PHashMap k v = PHM {
-    hashFn :: k -> Int32,
-    root :: Node k v
-}
+                                  hashFn :: k -> Int32,
+                                  root :: Node k v
+                              }
 
 instance (Eq k, Show k, Show v) => Show (PHashMap k v) where
     show (PHM _hashFn root) = show root
+
+data (Eq k) => Node k v = EmptyNode |
+                          LeafNode {
+                              hash :: Int32,
+                              key :: k,
+                              value :: v
+                          } |
+                          HashCollisionNode {
+                              hash :: Int32,
+                              pairs :: [(k, v)]
+                          } |
+                          BitmapIndexedNode {
+                              bitmap :: Int32,
+                              subNodes :: Array Int32 (Node k v)
+                          } |
+                          ArrayNode {
+                              numChildren :: Int,
+                              subNodes :: Array Int32 (Node k v)
+                          }
+
+instance (Eq k, Show k, Show v) => Show (Node k v) where
+    show EmptyNode = ""
+    show (LeafNode _hash key value) = show (key, value)
+    show (HashCollisionNode _hash pairs) = "h" ++ show pairs
+    show (BitmapIndexedNode bitmap subNodes) = "b" ++ show bitmap ++ (show $ elems subNodes)
+    show (ArrayNode numChildren subNodes) = "a" ++ show numChildren ++ (show $ elems subNodes)
 
 
 -- (empty hashFn) is the empty PHashMap, with hashFn being the key hash function
@@ -303,50 +340,13 @@ keysNode (ArrayNode _numChildren subNodes) =
     concat $ map keysNode $ elems subNodes
 
 
+-- Some miscellaneous helper functions
+
 nodeIsEmpty :: Node k v -> Bool
-
 nodeIsEmpty EmptyNode = True
-
 nodeIsEmpty _ = False
 
-
 hashFragment shift hash = (hash `shiftR` shift) .&. fromIntegral mask
-
-data (Eq k) => Node k v = EmptyNode |
-                          LeafNode {
-                              hash :: Int32,
-                              key :: k,
-                              value :: v
-                          } |
-                          HashCollisionNode {
-                              hash :: Int32,
-                              pairs :: [(k, v)]
-                          } |
-                          BitmapIndexedNode {
-                              bitmap :: Int32,
-                              subNodes :: Array Int32 (Node k v)
-                          } |
-                          ArrayNode {
-                              numChildren :: Int,
-                              subNodes :: Array Int32 (Node k v)
-                          }
-
-instance (Eq k, Show k, Show v) => Show (Node k v) where
-    show EmptyNode = ""
-    show (LeafNode _hash key value) = show (key, value)
-    show (HashCollisionNode _hash pairs) = "h" ++ show pairs
-    show (BitmapIndexedNode bitmap subNodes) = "b" ++ show bitmap ++ (show $ elems subNodes)
-    show (ArrayNode numChildren subNodes) = "a" ++ show numChildren ++ (show $ elems subNodes)
-
--- Some constants
-shiftStep :: Int
-shiftStep = 5
-
-chunk :: Int32
-chunk = 2^shiftStep
-
-mask :: Int32
-mask = pred chunk
 
 -- Bit operations
 
