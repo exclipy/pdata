@@ -147,7 +147,10 @@ updateNode _shift updateFn _hash' key' node@(LeafNode hash key value) =
        else node
 
 updateNode _shift updateFn _hash' key (HashCollisionNode hash pairs) =
-    HashCollisionNode hash (updateList updateFn key pairs)
+    let pairs' = updateList updateFn key pairs
+        in case pairs' of
+                [(key, value)] -> LeafNode hash key value
+                otherwise      -> HashCollisionNode hash pairs'
     where updateList updateFn key [] = []
           updateList updateFn key' ((key, value):pairs) | key' == key =
               maybe pairs
@@ -155,7 +158,6 @@ updateNode _shift updateFn _hash' key (HashCollisionNode hash pairs) =
                     (updateFn value)
           updateList updateFn key (p:pairs) =
               p : updateList updateFn key pairs
-    -- TODO: collapse to a LeafNode
 
 updateNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
     let subHash = hashFragment shift hash
@@ -166,6 +168,7 @@ updateNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
         child' = updateNode (shift+shiftStep) updateFn hash key child
         removed = nodeIsEmpty child' && not (nodeIsEmpty child)
         bound = snd $ bounds subNodes
+        bound' = if removed then bound - 1 else bound
         subNodes' = if removed
                        then let (left, right) = splitAt ix $ elems subNodes
                                 in listArray (0, bound - 1) $ left ++ (tail right)
@@ -174,9 +177,15 @@ updateNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
                      then bitmap .&. (complement bit)
                      else bitmap
         in if bitmap' == 0
-              then EmptyNode
-              else BitmapIndexedNode bitmap' subNodes'
-        -- TODO: collapse to a leaf node?
+              then EmptyNode -- Remove an empty BitmapIndexedNode
+                             -- Note: it's possible to have a single-element BitmapIndexedNode
+                             -- if there are two keys with the same subHash in the trie.
+              else if bound' == 0 && isLeafNode (subNodes' ! 0)
+                   then subNodes' ! 0 -- Pack a BitmapIndexedNode into a LeafNode
+                   else BitmapIndexedNode bitmap' subNodes'
+    where
+    isLeafNode (LeafNode _ _ _) = True
+    isLeafNode _ = False
 
 updateNode shift updateFn hash key node@(ArrayNode numChildren subNodes) =
     let subHash = hashFragment shift hash
@@ -187,6 +196,7 @@ updateNode shift updateFn hash key node@(ArrayNode numChildren subNodes) =
                           then numChildren - 1
                           else numChildren
         in if numChildren' < fromIntegral chunk `div` 4
+              -- Pack an ArrayNode into a HashCollisionNode when usage drops below 25%
               then packArrayNode subHash numChildren subNodes
               else ArrayNode numChildren' $ subNodes // [(subHash, child')]
     where
