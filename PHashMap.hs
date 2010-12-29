@@ -6,7 +6,10 @@ module PHashMap (PHashMap,
                  update,
                  PHashMap.delete,
                  PHashMap.lookup,
+                 mapWithKey,
+                 PHashMap.map,
                  member,
+                 notMember,
                  keys,
                  PHashMap.elems,
                  toList,
@@ -236,13 +239,13 @@ alterNode shift updateFn hash key node@(ArrayNode numChildren subNodes) =
     where
     packArrayNode :: (Eq k) => Int32 -> Int -> Array Int32 (Node k v) -> Node k v
     packArrayNode subHashToRemove numChildren subNodes =
-        let elems' = map (\i -> if i == subHashToRemove
+        let elems' = P.map (\i -> if i == subHashToRemove
                                    then EmptyNode
                                    else subNodes ! i)
                          [0..pred chunk]
             subNodes' = listArray (0, fromIntegral (numChildren-2)) $ filter (not.nodeIsEmpty) elems'
             listToBitmap = foldr (\on bm -> (bm `shiftL` 1) .|. (if on then 1 else 0)) 0
-            bitmap = listToBitmap $ map (not.nodeIsEmpty) elems'
+            bitmap = listToBitmap $ P.map (not.nodeIsEmpty) elems'
             in BitmapIndexedNode bitmap subNodes'
 
 
@@ -263,6 +266,40 @@ delete = alter (const Nothing)
 adjust :: (Eq k) => (v -> v) -> k -> PHashMap k v -> PHashMap k v
 
 adjust updateFn = update ((Just).updateFn)
+
+
+-- (mapWithKey fn hashMap) is a hashMap with all values modified using fn
+mapWithKey :: (Eq k) => (k -> v -> v) -> PHashMap k v -> PHashMap k v
+
+mapWithKey mapFn (PHM hashFn root) =
+    PHM hashFn $ mapWithKeyNode mapFn root
+
+
+mapWithKeyNode :: (Eq k) => (k -> v -> v) -> Node k v -> Node k v
+
+mapWithKeyNode _mapFn EmptyNode = EmptyNode
+
+mapWithKeyNode mapFn (LeafNode hash key value) = LeafNode hash key $ mapFn key value
+
+mapWithKeyNode mapFn (HashCollisionNode hash pairs) =
+    HashCollisionNode hash (P.map (\(key, value) -> (key, mapFn key value)) pairs)
+
+mapWithKeyNode mapFn (BitmapIndexedNode bitmap subNodes) =
+    BitmapIndexedNode bitmap $ arrayMap (mapWithKeyNode mapFn) subNodes
+
+mapWithKeyNode mapFn (ArrayNode numChildren subNodes) =
+    ArrayNode numChildren $ arrayMap (mapWithKeyNode mapFn) subNodes
+
+
+-- (map fn hashMap) is a hashMap with all values modified using fn
+map :: (Eq k) => (v -> v) -> PHashMap k v -> PHashMap k v
+
+map fn = mapWithKey (const fn)
+
+
+arrayMap :: (Ix i) => (a -> a) -> Array i a -> Array i a
+
+arrayMap fn arr = array (bounds arr) $ P.map (\(key, value) -> (key, fn value)) $ A.assocs arr
 
 
 -- (lookup key hashMap) is Just the value stored at the key, or Nothing if no such key exists
@@ -298,9 +335,9 @@ lookupNode shift hash key (ArrayNode _numChildren subNodes) =
 -- (member x hashMap) is True iff x is a key of hashMap
 member :: (Eq k) => k -> PHashMap k v -> Bool
 
-member k hashMap = maybe False (const True) (PHashMap.lookup k hashMap)
+member key hashMap = maybe False (const True) (PHashMap.lookup key hashMap)
 
-notMember = not.member
+notMember key = not.(member key)
 
 
 -- (toList hashMap) is all the key-value pairs in hashMap as a list
@@ -318,10 +355,10 @@ toListNode (LeafNode _hash key value) = [(key, value)]
 toListNode (HashCollisionNode _hash pairs) = pairs
 
 toListNode (BitmapIndexedNode _bitmap subNodes) =
-    concat $ map toListNode $ A.elems subNodes
+    concat $ P.map toListNode $ A.elems subNodes
 
 toListNode (ArrayNode _numChildren subNodes) =
-    concat $ map toListNode $ A.elems subNodes
+    concat $ P.map toListNode $ A.elems subNodes
 
 
 -- (fromList hashFn list) is a PHashMap equivalent to list interpreted as a dictionary
@@ -335,10 +372,10 @@ fromList hashFn = foldl' (\hm (key, value) -> insert key value hm)
 -- (keys hashMap) is a list of all keys in hashMap
 keys :: (Eq k) => PHashMap k v -> [k]
 
-keys = (map fst).toList
+keys = (P.map fst).toList
 
 
 -- (elems hashMap) is a list of all values in hashMap
 elems :: (Eq k) => PHashMap k v -> [v]
 
-elems = (map snd).toList
+elems = (P.map snd).toList
