@@ -1,9 +1,9 @@
 module PHashMap (PHashMap,
                  empty,
                  singleton,
+                 alter,
                  insert,
                  insertWith,
-                 alter,
                  update,
                  PHashMap.delete,
                  PHashMap.lookup,
@@ -72,9 +72,9 @@ instance (Eq k, Show k, Show v) => Show (Node k v) where
 
 -- Some miscellaneous helper functions
 
-nodeIsEmpty :: Node k v -> Bool
-nodeIsEmpty EmptyNode = True
-nodeIsEmpty _ = False
+isEmptyNode :: Node k v -> Bool
+isEmptyNode EmptyNode = True
+isEmptyNode _ = False
 
 hashFragment shift hash = (hash `shiftR` shift) .&. fromIntegral mask
 
@@ -91,19 +91,11 @@ singleton :: (Eq k) => (k -> Int32) -> k -> v -> PHashMap k v
 singleton hashFn key value = PHM hashFn $ LeafNode (hashFn key) key value
 
 
--- (insertWith accumFn key value hashMap) is hashMap with (key, value) inserted using accumulation
--- function accumFn.  If value v1 is inserted with the same key as an existing value v2, the new
--- value will be v1 `accumFn` v2
-insertWith :: (Eq k) => (v -> v -> v) -> k -> v -> PHashMap k v -> PHashMap k v
-
-insertWith accumFn key value hashMap =
-    let fn :: (v -> v -> v) -> v -> Maybe v -> Maybe v
-        fn accumFn x' Nothing = Just x'
-        fn accumFn x' (Just x) = Just $ accumFn x' x
-        in alter (fn accumFn value) key hashMap
+-- Helper data type for alterNode
+data Change = Removed | Modified | Nil | Added deriving Eq
 
 
--- A helper function for insertNodeWith
+-- A helper function for alterNode
 combineNodes :: (Eq k) => Int -> Node k v -> Node k v -> Node k v
 
 combineNodes shift node node' =
@@ -121,17 +113,6 @@ combineNodes shift node node' =
     where
     nodeHash (LeafNode hash key value) = hash
     nodeHash (HashCollisionNode hash pairs) = hash
-
-
--- (insert key value hashMap) is hashMap with (key, value) inserted, replacing any previous
--- value with the given key.
-insert :: (Eq k) => k -> v -> PHashMap k v -> PHashMap k v
-
-insert = insertWith const
-
-
--- Helper data type for alterNode
-data Change = Removed | Modified | Nil | Added deriving Eq
 
 
 -- (alter updateFn key hashMap) is hashMap with the value at key updated using updateFn.
@@ -155,7 +136,7 @@ alterNode shift updateFn hash' key' node@(LeafNode hash key value) =
                   (LeafNode hash key)
                   (updateFn (Just value))
        else let node' = alterNode shift updateFn hash' key' EmptyNode
-                in if nodeIsEmpty node'
+                in if isEmptyNode node'
                       then node
                       else combineNodes shift node node'
 
@@ -179,13 +160,13 @@ alterNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
         exists = (bitmap .&. bit) /= 0
         child = if exists then subNodes ! fromIntegral ix else EmptyNode
         child' = alterNode (shift+shiftStep) updateFn hash key child
-        removed = exists && nodeIsEmpty child'
-        added = not exists && not (nodeIsEmpty child')
+        removed = exists && isEmptyNode child'
+        added = not exists && not (isEmptyNode child')
         change = if exists
-                    then if nodeIsEmpty child'
+                    then if isEmptyNode child'
                             then Removed
                             else Modified
-                 else if nodeIsEmpty child'
+                 else if isEmptyNode child'
                     then Nil
                     else Added
         bound = snd $ bounds subNodes
@@ -235,7 +216,7 @@ alterNode shift updateFn hash key node@(ArrayNode numChildren subNodes) =
     let subHash = hashFragment shift hash
         child = subNodes ! subHash
         child' = alterNode (shift+shiftStep) updateFn hash key child
-        removed = nodeIsEmpty child' && not (nodeIsEmpty child)
+        removed = isEmptyNode child' && not (isEmptyNode child)
         numChildren' = if removed
                           then numChildren - 1
                           else numChildren
@@ -250,10 +231,29 @@ alterNode shift updateFn hash key node@(ArrayNode numChildren subNodes) =
                                    then EmptyNode
                                    else subNodes ! i)
                          [0..pred chunk]
-            subNodes' = listArray (0, (numChildren-2)) $ filter (not.nodeIsEmpty) elems'
+            subNodes' = listArray (0, (numChildren-2)) $ filter (not.isEmptyNode) elems'
             listToBitmap = foldr (\on bm -> (bm `shiftL` 1) .|. (if on then 1 else 0)) 0
-            bitmap = listToBitmap $ P.map (not.nodeIsEmpty) elems'
+            bitmap = listToBitmap $ P.map (not.isEmptyNode) elems'
             in BitmapIndexedNode bitmap subNodes'
+
+
+-- (insertWith accumFn key value hashMap) is hashMap with (key, value) inserted using accumulation
+-- function accumFn.  If value v1 is inserted with the same key as an existing value v2, the new
+-- value will be v1 `accumFn` v2
+insertWith :: (Eq k) => (v -> v -> v) -> k -> v -> PHashMap k v -> PHashMap k v
+
+insertWith accumFn key value hashMap =
+    let fn :: (v -> v -> v) -> v -> Maybe v -> Maybe v
+        fn accumFn x' Nothing = Just x'
+        fn accumFn x' (Just x) = Just $ accumFn x' x
+        in alter (fn accumFn value) key hashMap
+
+
+-- (insert key value hashMap) is hashMap with (key, value) inserted, replacing any previous
+-- value with the given key.
+insert :: (Eq k) => k -> v -> PHashMap k v -> PHashMap k v
+
+insert = insertWith const
 
 
 -- (update updateFn key hashMap) is hashMap with the value at key updated using updateFn.
