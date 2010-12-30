@@ -1,5 +1,6 @@
 module PHashMap (PHashMap,
                  empty,
+                 singleton,
                  insert,
                  insertWith,
                  alter,
@@ -82,6 +83,12 @@ hashFragment shift hash = (hash `shiftR` shift) .&. fromIntegral mask
 empty :: (Eq k) => (k -> Int32) -> PHashMap k v
 
 empty hashFn = PHM hashFn EmptyNode
+
+
+-- (singleton hashFn key value) is the single-element PHashMap containing only (key, value)
+singleton :: (Eq k) => (k -> Int32) -> k -> v -> PHashMap k v
+
+singleton hashFn key value = PHM hashFn $ LeafNode (hashFn key) key value
 
 
 -- (insertWith accumFn key value hashMap) is hashMap with (key, value) inserted using accumulation
