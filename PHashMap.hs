@@ -58,7 +58,7 @@ data (Eq k) => Node k v = EmptyNode |
                               subNodes :: Array Int32 (Node k v)
                           } |
                           ArrayNode {
-                              numChildren :: Int,
+                              numChildren :: Int32,
                               subNodes :: Array Int32 (Node k v)
                           }
 
@@ -244,13 +244,13 @@ alterNode shift updateFn hash key node@(ArrayNode numChildren subNodes) =
               then packArrayNode subHash numChildren subNodes
               else ArrayNode numChildren' $ subNodes // [(subHash, child')]
     where
-    packArrayNode :: (Eq k) => Int32 -> Int -> Array Int32 (Node k v) -> Node k v
+    packArrayNode :: (Eq k) => Int32 -> Int32 -> Array Int32 (Node k v) -> Node k v
     packArrayNode subHashToRemove numChildren subNodes =
         let elems' = P.map (\i -> if i == subHashToRemove
                                    then EmptyNode
                                    else subNodes ! i)
                          [0..pred chunk]
-            subNodes' = listArray (0, fromIntegral (numChildren-2)) $ filter (not.nodeIsEmpty) elems'
+            subNodes' = listArray (0, (numChildren-2)) $ filter (not.nodeIsEmpty) elems'
             listToBitmap = foldr (\on bm -> (bm `shiftL` 1) .|. (if on then 1 else 0)) 0
             bitmap = listToBitmap $ P.map (not.nodeIsEmpty) elems'
             in BitmapIndexedNode bitmap subNodes'
