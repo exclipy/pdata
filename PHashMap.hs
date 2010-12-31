@@ -7,6 +7,7 @@ module PHashMap (PHashMap,
                  update,
                  PHashMap.delete,
                  PHashMap.lookup,
+                 (PHashMap.!),
                  mapWithKey,
                  PHashMap.map,
                  member,
@@ -22,6 +23,7 @@ import Data.Int
 import Data.List hiding (insert, lookup)
 import Data.Array as A
 import Prelude as P
+import Control.Exception
 import Control.Monad
 
 -- Some constants
@@ -158,7 +160,7 @@ alterNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
         ix = fromBitmap bitmap subHash
         bit = toBitmap subHash
         exists = (bitmap .&. bit) /= 0
-        child = if exists then subNodes ! fromIntegral ix else EmptyNode
+        child = if exists then subNodes A.! fromIntegral ix else EmptyNode
         child' = alterNode (shift+shiftStep) updateFn hash key child
         removed = exists && isEmptyNode child'
         added = not exists && not (isEmptyNode child')
@@ -191,9 +193,9 @@ alterNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
                    -- Note: it's possible to have a single-element BitmapIndexedNode
                    -- if there are two keys with the same subHash in the trie.
                    EmptyNode
-           else if bound' == 0 && isLeafNode (subNodes' ! 0)
+           else if bound' == 0 && isLeafNode (subNodes' A.! 0)
               then -- Pack a BitmapIndexedNode into a LeafNode
-                   subNodes' ! 0
+                   subNodes' A.! 0
            else if change == Added && bound' > 15
               then -- Expand a BitmapIndexedNode into an ArrayNode
                    expandBitmapNode shift subHash child' bitmap subNodes
@@ -214,7 +216,7 @@ alterNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
 
 alterNode shift updateFn hash key node@(ArrayNode numChildren subNodes) =
     let subHash = hashFragment shift hash
-        child = subNodes ! subHash
+        child = subNodes A.! subHash
         child' = alterNode (shift+shiftStep) updateFn hash key child
         removed = isEmptyNode child' && not (isEmptyNode child)
         numChildren' = if removed
@@ -229,7 +231,7 @@ alterNode shift updateFn hash key node@(ArrayNode numChildren subNodes) =
     packArrayNode subHashToRemove numChildren subNodes =
         let elems' = P.map (\i -> if i == subHashToRemove
                                    then EmptyNode
-                                   else subNodes ! i)
+                                   else subNodes A.! i)
                          [0..pred chunk]
             subNodes' = listArray (0, (numChildren-2)) $ filter (not.isEmptyNode) elems'
             listToBitmap = foldr (\on bm -> (bm `shiftL` 1) .|. (if on then 1 else 0)) 0
@@ -331,12 +333,19 @@ lookupNode shift hash key (BitmapIndexedNode bitmap subNodes) =
         ix = fromBitmap bitmap subHash
         exists = (bitmap .&. (toBitmap subHash)) /= 0
         in if exists
-              then lookupNode (shift+shiftStep) hash key (subNodes!ix)
+              then lookupNode (shift+shiftStep) hash key (subNodes A.! ix)
               else Nothing
 
 lookupNode shift hash key (ArrayNode _numChildren subNodes) =
     let subHash = hashFragment shift hash
-        in lookupNode (shift+shiftStep) hash key (subNodes!subHash)
+        in lookupNode (shift+shiftStep) hash key (subNodes A.! subHash)
+
+
+(!) :: (Eq k) => PHashMap k v -> k -> v
+
+hashMap ! key = maybe (throw (IndexOutOfBounds "element not in the map"))
+                      id
+                      (PHashMap.lookup key hashMap)
 
 
 -- (member x hashMap) is True iff x is a key of hashMap

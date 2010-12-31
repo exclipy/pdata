@@ -1,6 +1,12 @@
-module PVector (PVector, empty, (|>), index, update, toList) where
+module PVector (
+    PVector,
+    empty,
+    (PVector.!),
+    append,
+    set,
+    toList) where
 
-import Data.Array hiding (index)
+import Data.Array as A
 import Data.Bits hiding (shift)
 import Control.Exception
 import Prelude hiding (tail)
@@ -19,20 +25,20 @@ instance (Show e) => Show (PVector e) where
 empty :: PVector e
 empty = PV 0 shiftStep (BodyNode (array (0, -1) [])) (array (0, -1) [])
 
--- (pv `index` ix) is the element at index ix
-index :: PVector e -> Int -> e
-(PV c s r t) `index` ix | ix >= c || ix < 0 = throw $ IndexOutOfBounds ""
-                        | ix >= tailOff c   = t ! (ix - tailOff c)
-                        | otherwise         = lookup r s ix
+-- (pv ! ix) is the element at index ix
+(!) :: PVector e -> Int -> e
+(PV c s r t) ! ix | ix >= c || ix < 0 = throw $ IndexOutOfBounds ""
+                  | ix >= tailOff c   = t A.! (ix - tailOff c)
+                  | otherwise         = lookup r s ix
     where lookup :: Node e -> Int -> Int -> e
           lookup node level ix = let subIx = (ix `shiftR` level) .&. mask
                                      in case node of
-                                             BodyNode a -> lookup (a ! subIx) (level-shiftStep) ix
-                                             LeafNode a -> a ! subIx
+                                             BodyNode a -> lookup (a A.! subIx) (level-shiftStep) ix
+                                             LeafNode a -> a A.! subIx
 
--- (pv |> el) is a new PVector the same as pv, except with el appended
-(|>) :: PVector e -> e -> PVector e
-(PV c s r t) |> el =
+-- (append el pv) is a new PVector the same as pv, except with el appended
+append :: e -> PVector e -> PVector e
+append el (PV c s r t) =
     let tailIx = c - tailOff c
         in if tailIx < chunk
               then let newTail = arrayAppend t el
@@ -55,28 +61,28 @@ index :: PVector e -> Int -> e
                              else if subIx > snd (bounds parent)
                                   then arrayAppend parent $ newPath (level-shiftStep) tail
                                   else (parent // [(subIx,
-                                       pushTail cnt (level-shiftStep) (parent ! subIx) tail)])
+                                       pushTail cnt (level-shiftStep) (parent A.! subIx) tail)])
                   in BodyNode array
 
           newPath :: Int -> Array Int e -> Node e
           newPath 0 t = LeafNode t
           newPath s t = BodyNode $ listArray (0, 0) [newPath (s-shiftStep) t]
 
--- (update ix el pv) is a PVector the same as pv, except with el at index ix
-update :: Int -> e -> PVector e -> PVector e
-update ix el (PV c s r t) | ix >= c || ix < 0 = throw $ IndexOutOfBounds ""
-                          | ix >= tailOff c   = PV c s r (t // [(ix - tailOff c, el)])
-                          | otherwise         = PV c s (modify r s ix el) t
+-- (set ix el pv) is a PVector the same as pv, except with el at index ix
+set :: Int -> e -> PVector e -> PVector e
+set ix el (PV c s r t) | ix >= c || ix < 0 = throw $ IndexOutOfBounds ""
+                       | ix >= tailOff c   = PV c s r (t // [(ix - tailOff c, el)])
+                       | otherwise         = PV c s (modify r s ix el) t
     where modify :: Node e -> Int -> Int -> e -> Node e
           modify node level ix el = let subIx = (ix `shiftR` level) .&. mask
                                     in case node of
                                             BodyNode a -> BodyNode (a // [(subIx,
-                                                modify (a ! subIx) (level-shiftStep) ix el)])
+                                                modify (a A.! subIx) (level-shiftStep) ix el)])
                                             LeafNode a -> LeafNode $ a // [(subIx, el)]
 
 -- (toList pv) is a list of the elements of pv
 toList :: PVector e -> [e]
-toList pv = [pv `index` x | x <- [0..(cnt pv)-1]]
+toList pv = [pv PVector.! x | x <- [0..(cnt pv)-1]]
 
 
 -- Private Stuff
