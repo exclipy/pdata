@@ -5,12 +5,13 @@ module PVector (
     append,
     adjust,
     set,
+    PVector.map,
     PVector.elems) where
 
 import Data.Array as A
 import Data.Bits hiding (shift)
 import Control.Exception
-import Prelude hiding (tail)
+import Prelude as P hiding (tail)
 import Data.List
 
 -- Some constants
@@ -35,7 +36,7 @@ instance (Show e) => Show (PVector e) where
 empty :: PVector e
 empty = PV 0 shiftStep (BodyNode (array (0, -1) [])) (array (0, -1) [])
 
--- (pv ! ix) is the element at index ix
+-- (pv ! ix) is the element of pv at index ix
 (!) :: PVector e -> Int -> e
 (PV c s r t) ! ix | ix >= c || ix < 0 = throw $ IndexOutOfBounds ""
                   | ix >= tailOff c   = t A.! (ix - tailOff c)
@@ -46,7 +47,7 @@ empty = PV 0 shiftStep (BodyNode (array (0, -1) [])) (array (0, -1) [])
                                              BodyNode a -> lookup (a A.! subIx) (level-shiftStep) ix
                                              LeafNode a -> a A.! subIx
 
--- (append el pv) is a new PVector the same as pv, except with el appended
+-- (append el pv) is pv, with el appended
 append :: e -> PVector e -> PVector e
 append el (PV c s r t) =
     let tailIx = c - tailOff c
@@ -78,8 +79,7 @@ append el (PV c s r t) =
           newPath 0 t = LeafNode t
           newPath s t = BodyNode $ listArray (0, 0) [newPath (s-shiftStep) t]
 
--- (adjust fn ix pv) is a PVector the same as pv, except with the element at index ix modified
--- using fn
+-- (adjust fn ix pv) is pv with the element at index ix modified using fn
 adjust ::  (e -> e) ->Int -> PVector e -> PVector e
 adjust fn ix (PV c s r t) | ix >= c || ix < 0 = throw $ IndexOutOfBounds ""
                           | ix >= tailOff c   = let tailIx = ix - tailOff c
@@ -95,14 +95,25 @@ adjust fn ix (PV c s r t) | ix >= c || ix < 0 = throw $ IndexOutOfBounds ""
                   el = a A.! subIx
                   in LeafNode $ a // [(subIx, fn el)]
 
--- (set ix el pv) is a PVector the same as pv, except with el at index ix
+-- (set ix el pv) is pv with el at index ix
 set :: Int -> e -> PVector e -> PVector e
 set ix e = adjust (const e) ix
+
+
+-- (map fn pv) is pv with every element el replaced with (fn el)
+map :: (e -> e) -> PVector e -> PVector e
+map fn (PV c s r t) = PV c s (mapNode fn r) (arrayMap fn t)
+    where mapNode fn (BodyNode a) = BodyNode $ arrayMap (mapNode fn) a
+          mapNode fn (LeafNode a) = LeafNode $ arrayMap fn a
+
+
+arrayMap :: (Ix i) => (a -> a) -> Array i a -> Array i a
+arrayMap fn arr = array (bounds arr) $ P.map (\(key, value) -> (key, fn value)) $ A.assocs arr
 
 -- (elems pv) is a list of the elements of pv
 elems :: PVector e -> [e]
 elems (PV c s r t) = elemsNode r ++ A.elems t
-    where elemsNode (BodyNode arr) = concat $ map elemsNode $ A.elems arr
+    where elemsNode (BodyNode arr) = concat $ P.map elemsNode $ A.elems arr
           elemsNode (LeafNode arr) = A.elems arr
 
 
