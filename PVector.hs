@@ -4,12 +4,18 @@ module PVector (
     (PVector.!),
     append,
     set,
-    toList) where
+    PVector.elems) where
 
 import Data.Array as A
 import Data.Bits hiding (shift)
 import Control.Exception
 import Prelude hiding (tail)
+import Data.List
+
+-- Some constants
+shiftStep = 5
+chunk = 2^shiftStep
+mask = pred chunk
 
 data PVector e = PV {
       cnt :: Int
@@ -18,8 +24,11 @@ data PVector e = PV {
     , tail :: Array Int e
     }
 
+data Node e = BodyNode (Array Int (Node e)) |
+              LeafNode (Array Int e)
+
 instance (Show e) => Show (PVector e) where
-    show = show.toList
+    show = ("fromList "++).show.(PVector.elems)
 
 -- (empty) is a PVector with nothing in it
 empty :: PVector e
@@ -80,21 +89,20 @@ set ix el (PV c s r t) | ix >= c || ix < 0 = throw $ IndexOutOfBounds ""
                                                 modify (a A.! subIx) (level-shiftStep) ix el)])
                                             LeafNode a -> LeafNode $ a // [(subIx, el)]
 
--- (toList pv) is a list of the elements of pv
-toList :: PVector e -> [e]
-toList pv = [pv PVector.! x | x <- [0..(cnt pv)-1]]
+-- (elems pv) is a list of the elements of pv
+elems :: PVector e -> [e]
+elems (PV c s r t) = elemsNode r ++ A.elems t
+    where elemsNode (BodyNode arr) = concat $ map elemsNode $ A.elems arr
+          elemsNode (LeafNode arr) = A.elems arr
+
+
+-- (fromList list) is a PVector equivalent to list
+fromList :: [e] -> PVector e
+fromList = foldl' (flip append) empty
+-- TODO: make this more efficient by using a transient array
 
 
 -- Private Stuff
-
--- Some constants
-shiftStep = 5
-chunk = 2^shiftStep
-mask = pred chunk
-
--- What a PVector is made of
-data Node e = BodyNode (Array Int (Node e)) |
-              LeafNode (Array Int e)
 
 -- Internal functions
 
@@ -105,4 +113,4 @@ tailOff count = if count < chunk
 
 arrayAppend :: (Ix i, Enum i) => Array i e -> e -> Array i e
 arrayAppend a el = let (lower, upper) = bounds a
-                       in listArray (lower, succ upper) (elems a ++ [el])
+                       in listArray (lower, succ upper) (A.elems a ++ [el])

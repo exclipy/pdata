@@ -27,13 +27,8 @@ import Control.Exception
 import Control.Monad
 
 -- Some constants
-shiftStep :: Int
 shiftStep = 5
-
-chunk :: Int32
 chunk = 2^shiftStep
-
-mask :: Int32
 mask = pred chunk
 
 
@@ -43,7 +38,7 @@ data (Eq k) => PHashMap k v = PHM {
                               }
 
 instance (Eq k, Show k, Show v) => Show (PHashMap k v) where
-    show (PHM _hashFn root) = show root
+    show = ("fromList hashFn "++).show.(PHashMap.toList)
 
 data (Eq k) => Node k v = EmptyNode |
                           LeafNode {
