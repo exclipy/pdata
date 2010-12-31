@@ -42,10 +42,10 @@ empty = PV 0 shiftStep (BodyNode (array (0, -1) [])) (array (0, -1) [])
                   | ix >= tailOff c   = t A.! (ix - tailOff c)
                   | otherwise         = lookup r s ix
     where lookup :: Node e -> Int -> Int -> e
-          lookup node level ix = let subIx = (ix `shiftR` level) .&. mask
-                                     in case node of
-                                             BodyNode a -> lookup (a A.! subIx) (level-shiftStep) ix
-                                             LeafNode a -> a A.! subIx
+          lookup (BodyNode a) level ix = let subIx = (ix `shiftR` level) .&. mask
+                                             in lookup (a A.! subIx) (level-shiftStep) ix
+          lookup (LeafNode a) level ix = let subIx = (ix `shiftR` level) .&. mask
+                                             in a A.! subIx
 
 -- (append el pv) is pv, with el appended
 append :: e -> PVector e -> PVector e
@@ -105,10 +105,9 @@ map :: (e -> e) -> PVector e -> PVector e
 map fn (PV c s r t) = PV c s (mapNode fn r) (arrayMap fn t)
     where mapNode fn (BodyNode a) = BodyNode $ arrayMap (mapNode fn) a
           mapNode fn (LeafNode a) = LeafNode $ arrayMap fn a
-
-
-arrayMap :: (Ix i) => (a -> a) -> Array i a -> Array i a
-arrayMap fn arr = array (bounds arr) $ P.map (\(key, value) -> (key, fn value)) $ A.assocs arr
+          arrayMap :: (Ix i) => (a -> a) -> Array i a -> Array i a
+          arrayMap fn arr =
+              array (bounds arr) $ P.map (\(key, value) -> (key, fn value)) $ A.assocs arr
 
 -- (elems pv) is a list of the elements of pv
 elems :: PVector e -> [e]
