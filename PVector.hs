@@ -3,6 +3,7 @@ module PVector (
     empty,
     (PVector.!),
     append,
+    adjust,
     set,
     PVector.elems) where
 
@@ -77,17 +78,26 @@ append el (PV c s r t) =
           newPath 0 t = LeafNode t
           newPath s t = BodyNode $ listArray (0, 0) [newPath (s-shiftStep) t]
 
+-- (adjust fn ix pv) is a PVector the same as pv, except with the element at index ix modified
+-- using fn
+adjust ::  (e -> e) ->Int -> PVector e -> PVector e
+adjust fn ix (PV c s r t) | ix >= c || ix < 0 = throw $ IndexOutOfBounds ""
+                          | ix >= tailOff c   = let tailIx = ix - tailOff c
+                                                    el = t A.! tailIx
+                                                    in PV c s r (t // [(tailIx, fn el)])
+                          | otherwise         = PV c s (modify r s ix fn) t
+    where modify :: Node e -> Int -> Int -> (e -> e) -> Node e
+          modify (BodyNode a) level ix fn =
+              let subIx = (ix `shiftR` level) .&. mask
+                  in BodyNode (a // [(subIx, modify (a A.! subIx) (level-shiftStep) ix fn)])
+          modify (LeafNode a) level ix fn =
+              let subIx = (ix `shiftR` level) .&. mask
+                  el = a A.! subIx
+                  in LeafNode $ a // [(subIx, fn el)]
+
 -- (set ix el pv) is a PVector the same as pv, except with el at index ix
 set :: Int -> e -> PVector e -> PVector e
-set ix el (PV c s r t) | ix >= c || ix < 0 = throw $ IndexOutOfBounds ""
-                       | ix >= tailOff c   = PV c s r (t // [(ix - tailOff c, el)])
-                       | otherwise         = PV c s (modify r s ix el) t
-    where modify :: Node e -> Int -> Int -> e -> Node e
-          modify node level ix el = let subIx = (ix `shiftR` level) .&. mask
-                                    in case node of
-                                            BodyNode a -> BodyNode (a // [(subIx,
-                                                modify (a A.! subIx) (level-shiftStep) ix el)])
-                                            LeafNode a -> LeafNode $ a // [(subIx, el)]
+set ix e = adjust (const e) ix
 
 -- (elems pv) is a list of the elements of pv
 elems :: PVector e -> [e]
