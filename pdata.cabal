@@ -1,0 +1,18 @@
+name:               pdata
+version:            0.1
+cabal-version:      >= 1.2
+synopsis:           A purely functional and persistent vector and hash map
+description:        A port of Clojure's efficient persistent vector and hash
+                    map data structures to Haskell
+license:            BSD3
+license-File:       LICENSE
+author:             Kevin Wu Won
+maintainer:         Kevin Wu Won <exclipy@gmail.com>
+category:           Data
+build-type:         Simple
+extra-source-files: BitUtil.hs
+
+library
+  build-depends:    base, array
+  exposed-modules:  PVector, PHashMap
+  other-modules:    BitUtil
