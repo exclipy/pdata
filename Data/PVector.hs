@@ -39,7 +39,8 @@ empty = PV 0 shiftStep (BodyNode (array (0, -1) [])) (array (0, -1) [])
 
 -- (pv ! ix) is the element of pv at index ix
 (!) :: PVector e -> Int -> e
-(PV c s r t) ! ix | ix >= c || ix < 0 = throw $ IndexOutOfBounds ""
+(PV c s r t) ! ix | ix >= c || ix < 0 = throw $ IndexOutOfBounds ("Index " ++ show ix
+                                                  ++ " out of range (0, " ++ show (c-1) ++ ")")
                   | ix >= tailOff c   = t A.! (ix - tailOff c)
                   | otherwise         = lookup r s ix
     where lookup :: Node e -> Int -> Int -> e

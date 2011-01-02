@@ -25,7 +25,6 @@ import Data.Int
 import Data.List hiding (insert, lookup)
 import Data.Array as A
 import Prelude as P
-import Control.Exception
 import Control.Monad
 
 -- Some constants
@@ -340,7 +339,7 @@ lookupNode shift hash key (ArrayNode _numChildren subNodes) =
 
 (!) :: (Eq k) => PHashMap k v -> k -> v
 
-hashMap ! key = maybe (throw (IndexOutOfBounds "element not in the map"))
+hashMap ! key = maybe (error "element not in the map")
                       id
                       (Data.PHashMap.lookup key hashMap)
 
