@@ -14,5 +14,5 @@ extra-source-files: BitUtil.hs
 
 library
   build-depends:    base, array
-  exposed-modules:  PVector, PHashMap
+  exposed-modules:  Data.PVector, Data.PHashMap
   other-modules:    BitUtil

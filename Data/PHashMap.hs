@@ -1,21 +1,22 @@
-module PHashMap (PHashMap,
-                 empty,
-                 singleton,
-                 alter,
-                 insert,
-                 insertWith,
-                 update,
-                 PHashMap.delete,
-                 PHashMap.lookup,
-                 (PHashMap.!),
-                 mapWithKey,
-                 PHashMap.map,
-                 member,
-                 notMember,
-                 keys,
-                 PHashMap.elems,
-                 toList,
-                 fromList) where
+module Data.PHashMap (
+    PHashMap,
+    empty,
+    singleton,
+    alter,
+    insert,
+    insertWith,
+    update,
+    Data.PHashMap.delete,
+    Data.PHashMap.lookup,
+    (Data.PHashMap.!),
+    mapWithKey,
+    Data.PHashMap.map,
+    member,
+    notMember,
+    keys,
+    Data.PHashMap.elems,
+    toList,
+    fromList) where
 
 import BitUtil
 import Data.Bits
@@ -38,7 +39,7 @@ data (Eq k) => PHashMap k v = PHM {
                               }
 
 instance (Eq k, Show k, Show v) => Show (PHashMap k v) where
-    show = ("fromList hashFn "++).show.(PHashMap.toList)
+    show = ("fromList hashFn "++).show.(Data.PHashMap.toList)
 
 data (Eq k) => Node k v = EmptyNode |
                           LeafNode {
@@ -340,13 +341,13 @@ lookupNode shift hash key (ArrayNode _numChildren subNodes) =
 
 hashMap ! key = maybe (throw (IndexOutOfBounds "element not in the map"))
                       id
-                      (PHashMap.lookup key hashMap)
+                      (Data.PHashMap.lookup key hashMap)
 
 
 -- (member x hashMap) is True iff x is a key of hashMap
 member :: (Eq k) => k -> PHashMap k v -> Bool
 
-member key hashMap = maybe False (const True) (PHashMap.lookup key hashMap)
+member key hashMap = maybe False (const True) (Data.PHashMap.lookup key hashMap)
 
 notMember key = not.(member key)
 

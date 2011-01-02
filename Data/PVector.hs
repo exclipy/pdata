@@ -1,12 +1,12 @@
-module PVector (
+module Data.PVector (
     PVector,
     empty,
-    (PVector.!),
+    (Data.PVector.!),
     append,
     adjust,
     set,
-    PVector.map,
-    PVector.elems) where
+    Data.PVector.map,
+    Data.PVector.elems) where
 
 import Data.Array as A
 import Data.Bits hiding (shift)
@@ -30,7 +30,7 @@ data Node e = BodyNode (Array Int (Node e)) |
               LeafNode (Array Int e)
 
 instance (Show e) => Show (PVector e) where
-    show = ("fromList "++).show.(PVector.elems)
+    show = ("fromList "++).show.(Data.PVector.elems)
 
 -- (empty) is a PVector with nothing in it
 empty :: PVector e
