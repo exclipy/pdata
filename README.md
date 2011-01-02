@@ -6,9 +6,10 @@ One of the prominent features of the [Clojure][1] language are a set of
 the most innovative and important are the persistent vector and persistent hash
 map.
 
-This project is a port of these structures to Haskell.  The API provides PVector
-(the persistent vector) and PHashMap (the persistent hash map).  The interface
-for both has been kept as consistent as possible with Data.Map.
+This project is a port of these structures to Haskell.  The API provides
+Data.PVector (the persistent vector) and Data.PHashMap (the persistent hash
+map).  The interface for both has been kept as consistent as possible with
+Data.Map.
 
 [1]: http://clojure.org/
 [2]: http://clojure.org/datatypes
