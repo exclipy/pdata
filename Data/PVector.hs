@@ -6,7 +6,8 @@ module Data.PVector (
     adjust,
     set,
     Data.PVector.map,
-    Data.PVector.elems) where
+    Data.PVector.elems,
+    fromList) where
 
 import Data.Array as A
 import Data.Bits hiding (shift)

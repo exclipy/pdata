@@ -7,6 +7,7 @@ module Data.PHashMap (
     insertWith,
     update,
     Data.PHashMap.delete,
+    adjust,
     Data.PHashMap.lookup,
     (Data.PHashMap.!),
     mapWithKey,
