@@ -117,20 +117,21 @@ I wrote this code after reading the following explanatory blog posts on how they
 work in Clojure.  They should also provide a decent birds-eye overview of my
 Haskell implementation.
 
-*   [Understanding Clojure’s PersistentVector implementation
-    ](http://blog.higher-order.net/2009/02/01/understanding-clojures-persistentvector-implementation/)
-*   [Understanding Clojure’s PersistentHashMap
-    ](http://blog.higher-order.net/2009/09/08/understanding-clojures-persistenthashmap-deftwice/)
-*   [Assoc and Clojure’s PersistentHashMap: part II
-    ](http://blog.higher-order.net/2010/08/16/assoc-and-clojures-persistenthashmap-part-ii/)
+* [Understanding Clojure’s PersistentVector implementation
+  ](http://blog.higher-order.net/2009/02/01/understanding-clojures-persistentvector-implementation/)
+* [Understanding Clojure’s PersistentHashMap
+  ](http://blog.higher-order.net/2009/09/08/understanding-clojures-persistenthashmap-deftwice/)
+* [Assoc and Clojure’s PersistentHashMap: part II
+  ](http://blog.higher-order.net/2010/08/16/assoc-and-clojures-persistenthashmap-part-ii/)
 
 
 To do (help appreciated!)
 -------------------------
-*   Haddock documentation
-*   Match Data.Map in completeness
-*   A more efficient fromList (it currently constructs lots of intermediary
+* Match Data.Map in completeness
+* Performance tuning
+  * More strictness
+  * A more efficient fromList (it currently constructs lots of intermediary
     structures
-*   Make a PVector-based implementation of IArray (?)
-*   Unit tests
-*   Performance tests
+* Make a PVector-based implementation of IArray (?)
+* Unit tests
+* Benchmarks

@@ -1,13 +1,21 @@
 module Data.PVector (
-    PVector,
-    empty,
-    (Data.PVector.!),
-    append,
-    adjust,
-    set,
-    Data.PVector.map,
-    Data.PVector.elems,
-    fromList) where
+    -- * PVector type
+      PVector
+    -- * Operators
+    , (Data.PVector.!)
+    -- * Construction
+    , empty
+    -- * Modification
+    , append
+    , adjust
+    , set
+    -- * Traversal
+    , Data.PVector.map
+    -- * Conversion
+    , Data.PVector.elems
+    , toList
+    , fromList
+    ) where
 
 import Data.Array as A
 import Data.Bits hiding (shift)
@@ -33,11 +41,12 @@ data Node e = BodyNode (Array Int (Node e)) |
 instance (Show e) => Show (PVector e) where
     show = ("fromList "++).show.(Data.PVector.elems)
 
--- (empty) is a PVector with nothing in it
+-- The empty PVector.
 empty :: PVector e
 empty = PV 0 shiftStep (BodyNode (array (0, -1) [])) (array (0, -1) [])
 
--- (pv ! ix) is the element of pv at index ix
+-- | Find the element at an index.
+-- Calls 'error' when the index is out of bounds.
 (!) :: PVector e -> Int -> e
 (PV c s r t) ! ix | ix >= c || ix < 0 = throw $ IndexOutOfBounds ("Index " ++ show ix
                                                   ++ " out of range (0, " ++ show (c-1) ++ ")")
@@ -49,7 +58,7 @@ empty = PV 0 shiftStep (BodyNode (array (0, -1) [])) (array (0, -1) [])
           lookup (LeafNode a) level ix = let subIx = (ix `shiftR` level) .&. mask
                                              in a A.! subIx
 
--- (append el pv) is pv, with el appended
+-- | Adds an element to the end of the vector.
 append :: e -> PVector e -> PVector e
 append el (PV c s r t) =
     let tailIx = c - tailOff c
@@ -81,9 +90,10 @@ append el (PV c s r t) =
           newPath 0 t = LeafNode t
           newPath s t = BodyNode $ listArray (0, 0) [newPath (s-shiftStep) t]
 
--- (adjust fn ix pv) is pv with the element at index ix modified using fn
+-- | Update an element at a specific index with the result of the provided function.
 adjust ::  (e -> e) ->Int -> PVector e -> PVector e
-adjust fn ix (PV c s r t) | ix >= c || ix < 0 = throw $ IndexOutOfBounds ""
+adjust fn ix (PV c s r t) | ix >= c || ix < 0 = throw $ IndexOutOfBounds ("Index " ++ show ix
+                                                  ++ " out of range (0, " ++ show (c-1) ++ ")")
                           | ix >= tailOff c   = let tailIx = ix - tailOff c
                                                     el = t A.! tailIx
                                                     in PV c s r (t // [(tailIx, fn el)])
@@ -97,12 +107,12 @@ adjust fn ix (PV c s r t) | ix >= c || ix < 0 = throw $ IndexOutOfBounds ""
                   el = a A.! subIx
                   in LeafNode $ a // [(subIx, fn el)]
 
--- (set ix el pv) is pv with el at index ix
+-- | Update an element at a specific index with a specific value.
 set :: Int -> e -> PVector e -> PVector e
 set ix e = adjust (const e) ix
 
 
--- (map fn pv) is pv with every element el replaced with (fn el)
+-- | Map a function over all elements in the vector.
 map :: (e -> e) -> PVector e -> PVector e
 map fn (PV c s r t) = PV c s (mapNode fn r) (arrayMap fn t)
     where mapNode fn (BodyNode a) = BodyNode $ arrayMap (mapNode fn) a
@@ -111,14 +121,19 @@ map fn (PV c s r t) = PV c s (mapNode fn r) (arrayMap fn t)
           arrayMap fn arr =
               array (bounds arr) $ P.map (\(key, value) -> (key, fn value)) $ A.assocs arr
 
--- (elems pv) is a list of the elements of pv
+-- | Convert to a list.
 elems :: PVector e -> [e]
 elems (PV c s r t) = elemsNode r ++ A.elems t
     where elemsNode (BodyNode arr) = concat $ P.map elemsNode $ A.elems arr
           elemsNode (LeafNode arr) = A.elems arr
 
 
--- (fromList list) is a PVector equivalent to list
+-- | Convert to a list.
+toList :: PVector e -> [e]
+toList = Data.PVector.elems
+
+
+-- | Build a vector from a list.
 fromList :: [e] -> PVector e
 fromList = foldl' (flip append) empty
 -- TODO: make this more efficient by using a transient array
