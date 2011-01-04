@@ -17,6 +17,15 @@ Data.Map.
 
 Basic usage
 -----------
+These two data structures are:
+
+*  Immutable.  Unlike Data.Array.ST and Data.HashTable, there are no monads in
+   sight.
+*  Persistent.  They provide "update" operations which do not destroy the
+   original structure.
+*  Efficient.  Unlike Data.Array, updating a PVector or PHashMap doesn't copy
+   the entire structure, but only the changed path in the internal tree
+   representation.
 
 Here's a demo of what you can do with a PVector:
 
@@ -109,6 +118,23 @@ And here's a demo of the basic functionality of PHashMap:
     ghci> toList it
     [("b",2),("c",3),("a",1)]
 
+
+Installation
+------------
+
+To try it yourself, just do the usual:
+
+    $ runghc Setup.hs configure --user
+    $ runghc Setup.hs build
+    $ runghc Setup.hs install
+
+Performance
+-----------
+
+The single-element operations for each of these structures technically run in
+logarithmic time.  However, it is implemented as a 32-ary tree, which means it
+never exceeds a depth of 7 nodes, so you can treat them as constant-time
+operations (for relatively large constants).
 
 How it works
 ------------
