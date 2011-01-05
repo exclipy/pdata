@@ -1,12 +1,16 @@
 module BitUtil (fromBitmap, toBitmap, bitmapToIndices, bitCount32) where
 
 import Data.Bits
+import Data.Word
+import Data.Int
 
 -- Bit operations
 
 -- Given a bitmap and a subhash, this function returns the index into the list
-fromBitmap :: (Integral a, Bits a, Integral b, Num c) => a -> b -> c
-fromBitmap bitmap subHash = fromIntegral $ bitCount32 $ bitmap .&. (pred (toBitmap subHash))
+fromBitmap :: (Integral b, Num c) => Int32 -> b -> c
+fromBitmap bitmap subHash =
+    let mask = fromIntegral (pred (toBitmap subHash :: Word32)) :: Int32
+        in fromIntegral $ bitCount32 $ bitmap .&. mask
 
 toBitmap :: (Bits t, Integral a) => a -> t
 toBitmap subHash = 1 `shiftL` fromIntegral subHash

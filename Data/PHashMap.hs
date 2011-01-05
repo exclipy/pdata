@@ -226,10 +226,18 @@ alterNode shift updateFn hash key node@(ArrayNode numChildren subNodes) =
     let subHash = hashFragment shift hash
         child = subNodes A.! subHash
         child' = alterNode (shift+shiftStep) updateFn hash key child
-        removed = isEmptyNode child' && not (isEmptyNode child)
-        numChildren' = if removed
-                          then numChildren - 1
-                          else numChildren
+        change = if isEmptyNode child
+                    then if isEmptyNode child'
+                            then Nil
+                            else Added
+                 else if isEmptyNode child'
+                    then Removed
+                    else Modified
+        numChildren' = case change of
+                            Removed  -> numChildren-1
+                            Modified -> numChildren
+                            Nil      -> numChildren
+                            Added    -> numChildren+1
         in if numChildren' < fromIntegral chunk `div` 4
               -- Pack an ArrayNode into a HashCollisionNode when usage drops below 25%
               then packArrayNode subHash numChildren subNodes
