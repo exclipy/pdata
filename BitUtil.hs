@@ -7,10 +7,10 @@ import Data.Int
 -- Bit operations
 
 -- Given a bitmap and a subhash, this function returns the index into the list
-fromBitmap :: (Integral b, Num c) => Int32 -> b -> c
+fromBitmap :: (Integral b, Integral c) => Int32 -> b -> c
 fromBitmap bitmap subHash =
     let mask = fromIntegral (pred (toBitmap subHash :: Word32)) :: Int32
-        in fromIntegral $ bitCount32 $ bitmap .&. mask
+        in bitCount32 $ bitmap .&. mask
 
 toBitmap :: (Bits t, Integral a) => a -> t
 toBitmap subHash = 1 `shiftL` fromIntegral subHash
@@ -22,7 +22,7 @@ bitmapToIndices bitmap = loop 0 bitmap
           loop ix bitmap | bitmap .&. 1 == 0 = loop (ix+1) (bitmap `shiftR` 1)
                          | otherwise         = ix:(loop (ix+1) (bitmap `shiftR` 1))
 
-bitCount32 :: (Bits a, Integral b) => a -> b
+bitCount32 :: (Integral a) => Int32 -> a
 bitCount32 x = bitCount8 ((x `shiftR` 24) .&. 0xff) +
                bitCount8 ((x `shiftR` 16) .&. 0xff) +
                bitCount8 ((x `shiftR` 8) .&. 0xff) +
