@@ -1,5 +1,5 @@
-name:               pdata
-version:            0.1
+name:               hashmap
+version:            0.2
 cabal-version:      >= 1.2
 synopsis:           A purely functional and persistent vector and hash map
 description:        A port of Clojure's efficient persistent vector and hash
@@ -11,10 +11,11 @@ maintainer:         Kevin Wu Won <exclipy@gmail.com>
 homepage:           https://github.com/exclipy/pdata
 category:           Data Structures
 build-type:         Simple
-extra-source-files: BitUtil.hs
+extra-source-files: Data/BitUtil.hs
+stability:          experimental
 
 library
   build-depends:    base >= 4.2, array, deepseq
-  exposed-modules:  Data.PVector, Data.PHashMap
-  other-modules:    BitUtil
+  exposed-modules:  Data.HashMap
+  other-modules:    Data.BitUtil
   ghc-options:      -O2

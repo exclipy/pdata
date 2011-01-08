@@ -1,4 +1,4 @@
-module BitUtil (fromBitmap, toBitmap, bitmapToIndices, bitCount32) where
+module Data.BitUtil where
 
 import Data.Bits
 import Data.Word
