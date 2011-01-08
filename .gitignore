@@ -1,0 +1,5 @@
+*.swp
+.gitignore
+*.o
+*.hi
+dist/
