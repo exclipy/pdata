@@ -29,18 +29,13 @@ module Data.PHashMap (
     ) where
 
 import BitUtil
+import Control.Monad
+import Control.DeepSeq
 import Data.Bits
 import Data.Int
 import Data.List hiding (insert, lookup)
 import Data.Array as A
 import Prelude as P
-import Control.Monad
-
--- Some constants
-shiftStep = 5
-chunk = 2^shiftStep
-mask = pred chunk
-
 
 -- | A PHashMap from keys @k@ to values @v@
 data (Eq k) => PHashMap k v = PHM {
@@ -50,6 +45,16 @@ data (Eq k) => PHashMap k v = PHM {
 
 instance (Eq k, Show k, Show v) => Show (PHashMap k v) where
     show = ("fromList hashFn "++).show.(Data.PHashMap.toList)
+
+instance (Eq k, NFData k, NFData v) => NFData (PHashMap k v) where
+    rnf (PHM f r) = f `seq` rnf r
+
+instance (Eq k, NFData k, NFData v) => NFData (Node k v) where
+    rnf EmptyNode = ()
+    rnf (LeafNode h k v) = rnf h `seq` rnf k `seq` rnf v
+    rnf (HashCollisionNode h xs) = rnf h `seq` rnf xs
+    rnf (BitmapIndexedNode bm arr) = rnf bm `seq` rnf arr
+    rnf (ArrayNode n arr) = rnf n `seq` rnf arr
 
 data (Eq k) => Node k v = EmptyNode |
                           LeafNode {
@@ -77,6 +82,11 @@ instance (Eq k, Show k, Show v) => Show (Node k v) where
     show (BitmapIndexedNode bitmap subNodes) = "b" ++ show bitmap ++ (show $ A.elems subNodes)
     show (ArrayNode numChildren subNodes) = "a" ++ show numChildren ++ (show $ A.elems subNodes)
 
+
+-- Some constants
+shiftStep = 5
+chunk = 2^shiftStep
+mask = pred chunk
 
 -- Some miscellaneous helper functions
 

@@ -9,11 +9,12 @@ license-File:       LICENSE
 author:             Kevin Wu Won
 maintainer:         Kevin Wu Won <exclipy@gmail.com>
 homepage:           https://github.com/exclipy/pdata
-category:           Data
+category:           Data Structures
 build-type:         Simple
 extra-source-files: BitUtil.hs
 
 library
-  build-depends:    base, array
+  build-depends:    base >= 4.2, array, deepseq
   exposed-modules:  Data.PVector, Data.PHashMap
   other-modules:    BitUtil
+  ghc-options:      -O2
