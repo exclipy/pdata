@@ -87,6 +87,8 @@ instance (Eq k, Show k, Show v) => Show (Node k v) where
 shiftStep = 5
 chunk = 2^shiftStep
 mask = pred chunk
+bmnodeMax = 16 -- maximum size of a BitmapIndexedNode
+arraynodeMin = 8  -- minimum size of an ArrayNode
 
 -- Some miscellaneous helper functions
 
@@ -214,7 +216,7 @@ alterNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
            else if bound' == 0 && isLeafNode (subNodes' A.! 0)
               then -- Pack a BitmapIndexedNode into a LeafNode
                    subNodes' A.! 0
-           else if change == Added && bound' > 15
+           else if change == Added && bound' > bmnodeMax - 1
               then -- Expand a BitmapIndexedNode into an ArrayNode
                    expandBitmapNode shift subHash child' bitmap subNodes
               else BitmapIndexedNode bitmap' subNodes'
@@ -248,7 +250,7 @@ alterNode shift updateFn hash key node@(ArrayNode numChildren subNodes) =
                             Modified -> numChildren
                             Nil      -> numChildren
                             Added    -> numChildren+1
-        in if numChildren' < fromIntegral chunk `div` 4
+        in if numChildren' < arraynodeMin
               -- Pack an ArrayNode into a HashCollisionNode when usage drops below 25%
               then packArrayNode subHash numChildren subNodes
               else ArrayNode numChildren' $ subNodes // [(subHash, child')]
@@ -423,9 +425,37 @@ toListNode (ArrayNode _numChildren subNodes) =
 -- for the key is retained.
 fromList :: (Eq k) => (k -> Int32) -> [(k, v)] -> HashMap k v
 
-fromList hashFn = foldl' (\hm (key, value) -> insert key value hm)
-                         (empty hashFn)
-                  -- TODO: make this more efficient by using a transient array
+fromList hashFn assocs = HM hashFn $ fromListNode 0 $ P.map (\(k, v) -> ((hashFn k), k, v)) assocs
+
+
+fromListNode :: (Eq k) => Int -> [(Int32, k, v)] -> Node k v
+
+fromListNode shift hkvs =
+    let subHashed = P.map (\triple@(h, k, v) -> (hashFragment shift h, triple)) hkvs
+        divided = accumArray (flip (:)) [] (0, mask) subHashed
+        dividedList = A.elems divided
+        subNodes = listArray (0, mask) $ P.map (fromListNode (shift+shiftStep)) $ dividedList
+        numChildren = length $ filter (not.null) dividedList
+        in case hkvs of
+                []          -> EmptyNode
+                [(h, k, v)] -> LeafNode h k v
+                (h, k, _):hkvs' | all (\(h', _, _) -> h' == h) hkvs' ->
+                    if all (\(_, k', _) -> k' == k) hkvs'
+                       then let (h', k', v') = last hkvs in LeafNode h' k' v'
+                       else HashCollisionNode h $ P.map (\(_, k', v') -> (k', v')) hkvs
+                _ | numChildren > fromIntegral bmnodeMax  ->
+                    ArrayNode (fromIntegral numChildren) subNodes
+                _ | otherwise ->
+                    makeBMNode numChildren subNodes
+    where
+    makeBMNode :: (Eq k) => Int -> Array Int32 (Node k v) -> Node k v
+    makeBMNode numChildren subNodes =
+        let subNodeList = A.elems subNodes
+            subNodes' = listArray (0, (fromIntegral numChildren-1)) $ filter (not.isEmptyNode) subNodeList
+            listToBitmap = foldr (\on bm -> (bm `shiftL` 1) .|. (if on then 1 else 0)) 0
+            bitmap = listToBitmap $ P.map (not.isEmptyNode) subNodeList
+            in BitmapIndexedNode bitmap subNodes'
+
 
 
 -- | Return all keys of the map.

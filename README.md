@@ -100,8 +100,6 @@ To do (help appreciated!)
 -------------------------
 * Match Data.Map in completeness
 * Performance tuning
-  * More strictness
-  * A more efficient fromList (it currently constructs lots of intermediary
-    structures
+  * Efficient implementations of (//), fromListWith, etc. based on fromList
 * Unit tests
 * Benchmarks

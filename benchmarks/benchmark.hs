@@ -27,7 +27,8 @@ main = do
     let hmbs = HM.fromList hashBS elemsBS :: HM.HashMap BS.ByteString Int
     defaultMainWith defaultConfig
         (liftIO . evaluate $ rnf [hmbs])
-        [ bench "lookup" $ nf (lookup keysBS) hmbs
+        [ bench "fromList" $ nf (HM.fromList hashBS) elemsBS
+        , bench "lookup" $ nf (lookup keysBS) hmbs
         , bench "insert" $ nf (insert elemsBS) (HM.empty hashBS)
         , bench "delete" $ nf (delete keysBS) hmbs
         ]

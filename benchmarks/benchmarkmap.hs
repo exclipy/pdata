@@ -27,7 +27,8 @@ main = do
     let hmbs = M.fromList elemsBS :: M.Map BS.ByteString Int
     defaultMainWith defaultConfig
         (liftIO . evaluate $ rnf [hmbs])
-        [ bench "lookup" $ nf (lookup keysBS) hmbs
+        [ bench "fromList" $ nf M.fromList elemsBS
+        , bench "lookup" $ nf (lookup keysBS) hmbs
         , bench "insert" $ nf (insert elemsBS) (M.empty)
         , bench "delete" $ nf (delete keysBS) hmbs
         ]
