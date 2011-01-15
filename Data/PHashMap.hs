@@ -25,6 +25,7 @@ module Data.PHashMap (
     , Data.PHashMap.elems
     , keys
     , toList
+    , fromListWith
     , fromList
     ) where
 
@@ -423,40 +424,38 @@ toListNode (ArrayNode _numChildren subNodes) =
     concat $ P.map toListNode $ A.elems subNodes
 
 
--- | Build a map from a list of key\/value pairs.
--- If the list contains more than one value for the same key, the last value
--- for the key is retained.
-fromList :: (Eq k) => (k -> Int32) -> [(k, v)] -> PHashMap k v
+-- | Build a map from a list of key\/value pairs with a combining function.
+fromListWith :: (Eq k) => (k -> Int32) -> (v -> v -> v) -> [(k, v)] -> PHashMap k v
 
-fromList hashFn assocs = HM hashFn $ fromListNode 0 $ P.map (\(k, v) -> ((hashFn k), k, v)) assocs
+fromListWith hashFn combineFn assocs =
+    HM hashFn $ fromListNode 0 combineFn $ P.map (\(k, v) -> ((hashFn k), k, v)) assocs
 
 
-fromListNode :: (Eq k) => Int -> [(Int32, k, v)] -> Node k v
+fromListNode :: (Eq k) => Int -> (v -> v -> v) -> [(Int32, k, v)] -> Node k v
 
-fromListNode shift hkvs =
+fromListNode shift combineFn hkvs =
     let subHashed = P.map (\triple@(h, k, v) -> (hashFragment shift h, triple)) hkvs
         divided = accumArray (flip (:)) [] (0, mask) subHashed
                   -- this will alternately reverse and unreverse the list on each level down
         dividedList = A.elems divided
-        subNodes = listArray (0, mask) $ P.map (fromListNode (shift+shiftStep)) $ dividedList
+        subNodes = listArray (0, mask) $ P.map (fromListNode (shift+shiftStep) combineFn) $ dividedList
         numChildren = length $ filter (not.null) dividedList
         in case hkvs of
                 []          -> EmptyNode
                 [(h, k, v)] -> LeafNode h k v
                 (h, k, v):hkvs' | all (\(h', _, _) -> h' == h) hkvs' ->
                     if all (\(_, k', _) -> k' == k) hkvs'
-                       then let (h', k', v') = if even shift -- depending on whether the list on
-                                                             -- this level has been reversed, take
-                                                             -- either the first or the last element
-                                                  then last hkvs
-                                                  else (h, k, v)
-                                in LeafNode h' k' v'
+                       then let combineFn' = if even shift then flip combineFn else combineFn
+                                           -- correct for the alternate reversing of the list
+                                v' = foldl1' combineFn' (P.map (\(_, _, v) -> v) hkvs)
+                                in LeafNode h k v'
                        else let keyCmp (k1, _) (k2, _) = k1 == k2
                                 collisions = P.map (\(_, k', v') -> (k', v')) hkvs
-                                collisions' = if even shift -- correct for the alternate reversing
-                                                            -- of the list
-                                                 then nubBy keyCmp $ reverse collisions
-                                                 else nubBy keyCmp collisions
+                                grouped = groupBy' keyCmp collisions
+                                combineFn' = if even shift then flip combineFn else combineFn
+                                collisionKeys = P.map (fst.head) grouped
+                                collisionVals = P.map ((foldl1' combineFn').(P.map snd)) grouped
+                                collisions' = zip collisionKeys collisionVals
                                 in HashCollisionNode h collisions'
                 _ | numChildren > fromIntegral bmnodeMax  ->
                     ArrayNode (fromIntegral numChildren) subNodes
@@ -470,6 +469,24 @@ fromListNode shift hkvs =
             listToBitmap = foldr (\on bm -> (bm `shiftL` 1) .|. (if on then 1 else 0)) 0
             bitmap = listToBitmap $ P.map (not.isEmptyNode) subNodeList
             in BitmapIndexedNode bitmap subNodes'
+
+    -- groupBy' is like Data.List.groupBy, but also groups non-adjacent elements
+    groupBy' :: (a -> a -> Bool) -> [a] -> [[a]]
+    groupBy' eq list = P.map reverse $ foldl' (insertGrouped eq) [] list
+
+    insertGrouped :: (a -> a -> Bool) -> [[a]] -> a -> [[a]]
+    insertGrouped eq [] y = [[y]]
+    insertGrouped eq ((x:xs):gs) y | eq x y    = (y:x:xs) : gs
+                                   | otherwise = (x:xs) : insertGrouped eq gs y
+
+
+-- | Build a map from a list of key\/value pairs.
+-- If the list contains more than one value for the same key, the last value
+-- for the key is retained.
+fromList :: (Eq k) => (k -> Int32) -> [(k, v)] -> PHashMap k v
+
+fromList hashFn assocs =
+    fromListWith hashFn const assocs
 
 
 
