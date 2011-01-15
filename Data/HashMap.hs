@@ -433,16 +433,27 @@ fromListNode :: (Eq k) => Int -> [(Int32, k, v)] -> Node k v
 fromListNode shift hkvs =
     let subHashed = P.map (\triple@(h, k, v) -> (hashFragment shift h, triple)) hkvs
         divided = accumArray (flip (:)) [] (0, mask) subHashed
+                  -- this will alternately reverse and unreverse the list on each level down
         dividedList = A.elems divided
         subNodes = listArray (0, mask) $ P.map (fromListNode (shift+shiftStep)) $ dividedList
         numChildren = length $ filter (not.null) dividedList
         in case hkvs of
                 []          -> EmptyNode
                 [(h, k, v)] -> LeafNode h k v
-                (h, k, _):hkvs' | all (\(h', _, _) -> h' == h) hkvs' ->
+                (h, k, v):hkvs' | all (\(h', _, _) -> h' == h) hkvs' ->
                     if all (\(_, k', _) -> k' == k) hkvs'
-                       then let (h', k', v') = last hkvs in LeafNode h' k' v'
-                       else HashCollisionNode h $ P.map (\(_, k', v') -> (k', v')) hkvs
+                       then let (h', k', v') = if even shift -- depending on whether the list on
+                                                             -- this level has been reversed, take
+                                                             -- either the first or the last element
+                                                  then last hkvs
+                                                  else (h, k, v)
+                                in LeafNode h' k' v'
+                       else let collisions = P.map (\(_, k', v') -> (k', v')) hkvs
+                                collisions' = if even shift -- correct for the alternate reversing
+                                                            -- of the list
+                                                 then reverse collisions
+                                                 else collisions
+                                in HashCollisionNode h collisions'
                 _ | numChildren > fromIntegral bmnodeMax  ->
                     ArrayNode (fromIntegral numChildren) subNodes
                 _ | otherwise ->
