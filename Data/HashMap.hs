@@ -44,7 +44,8 @@ data (Eq k) => HashMap k v = HM {
                               }
 
 instance (Eq k, Show k, Show v) => Show (HashMap k v) where
-    show = ("fromList hashFn "++).show.(Data.HashMap.toList)
+    show (HM h r) = show r
+    -- show = ("fromList hashFn "++).show.(Data.HashMap.toList)
 
 instance (Eq k, NFData k, NFData v) => NFData (HashMap k v) where
     rnf (HM f r) = f `seq` rnf r
@@ -115,27 +116,6 @@ singleton hashFn key value = HM hashFn $ LeafNode (hashFn key) key value
 data Change = Removed | Modified | Nil | Added deriving Eq
 
 
--- A helper function for alterNode
-combineNodes :: (Eq k) => Int -> Node k v -> Node k v -> Node k v
-
-combineNodes shift node node' =
-    let subHash = hashFragment shift (nodeHash node)
-        subHash2 = hashFragment shift (nodeHash node')
-        (nodeA, nodeB) = if (subHash < subHash2)
-                            then (node, node')
-                            else (node', node)
-        bitmap' = ((toBitmap subHash) .|. (toBitmap subHash2))
-        subNodes' = if subHash == subHash2
-                       then listArray (0, 0) [combineNodes (shift+shiftStep) node node']
-                       else listArray (0, 1) [nodeA, nodeB]
-        in BitmapIndexedNode bitmap' subNodes'
-
-    where
-    nodeHash (LeafNode hash key value) = hash
-    nodeHash (HashCollisionNode hash pairs) = hash
-
-
-
 -- | The expression (@'alter' f k map@) alters the value @x@ at @k@, or absence thereof.
 -- 'alter' can be used to insert, delete, or update a value in a 'Map'.
 -- In short : @'lookup' k ('alter' f k m) = f ('lookup' k m)@.
@@ -161,13 +141,36 @@ alterNode shift updateFn hash' key' node@(LeafNode hash key value) =
                 in if isEmptyNode node'
                       then node
                       else combineNodes shift node node'
+    where
+    combineNodes :: (Eq k) => Int -> Node k v -> Node k v -> Node k v
+    combineNodes shift node1@(LeafNode h1 k1 v1) node2@(LeafNode h2 k2 v2) =
+        let hash1 = nodeHash node1
+            hash2 = nodeHash node2
+            subHash1 = hashFragment shift hash1
+            subHash2 = hashFragment shift hash2
+            (nodeA, nodeB) = if (subHash1 < subHash2)
+                                then (node1, node2)
+                                else (node2, node1)
+            bitmap' = ((toBitmap subHash1) .|. (toBitmap subHash2))
+            subNodes' = if subHash1 == subHash2
+                           then listArray (0, 0) [combineNodes (shift+shiftStep) node1 node2]
+                           else listArray (0, 1) [nodeA, nodeB]
+            in if hash1 == hash2
+                  then HashCollisionNode hash1 [(k2, v2), (k1, v1)]
+                  else BitmapIndexedNode bitmap' subNodes'
+    nodeHash (LeafNode hash key value) = hash
+    nodeHash (HashCollisionNode hash pairs) = hash
 
 alterNode _shift updateFn _hash' key (HashCollisionNode hash pairs) =
     let pairs' = updateList updateFn key pairs
         in case pairs' of
+                []             -> undefined -- should never happen
                 [(key, value)] -> LeafNode hash key value
                 otherwise      -> HashCollisionNode hash pairs'
-    where updateList updateFn key [] = []
+    where updateList updateFn key [] =
+              maybe []
+                    (\value' -> [(key, value')])
+                    (updateFn Nothing)
           updateList updateFn key' ((key, value):pairs) | key' == key =
               maybe pairs
                     (\value' -> (key, value'):pairs)
@@ -251,7 +254,7 @@ alterNode shift updateFn hash key node@(ArrayNode numChildren subNodes) =
                             Nil      -> numChildren
                             Added    -> numChildren+1
         in if numChildren' < arraynodeMin
-              -- Pack an ArrayNode into a HashCollisionNode when usage drops below 25%
+              -- Pack an ArrayNode into a BitmapIndexedNode when usage drops below 25%
               then packArrayNode subHash numChildren subNodes
               else ArrayNode numChildren' $ subNodes // [(subHash, child')]
     where
@@ -448,11 +451,12 @@ fromListNode shift hkvs =
                                                   then last hkvs
                                                   else (h, k, v)
                                 in LeafNode h' k' v'
-                       else let collisions = P.map (\(_, k', v') -> (k', v')) hkvs
+                       else let keyCmp (k1, _) (k2, _) = k1 == k2
+                                collisions = P.map (\(_, k', v') -> (k', v')) hkvs
                                 collisions' = if even shift -- correct for the alternate reversing
                                                             -- of the list
-                                                 then reverse collisions
-                                                 else collisions
+                                                 then nubBy keyCmp $ reverse collisions
+                                                 else nubBy keyCmp collisions
                                 in HashCollisionNode h collisions'
                 _ | numChildren > fromIntegral bmnodeMax  ->
                     ArrayNode (fromIntegral numChildren) subNodes
