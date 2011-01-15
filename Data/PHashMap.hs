@@ -1,12 +1,12 @@
-module Data.HashMap (
-    -- * HashMap type
-      HashMap
+module Data.PHashMap (
+    -- * PHashMap type
+      PHashMap
     -- * Operators
-    , (Data.HashMap.!)
+    , (Data.PHashMap.!)
     -- * Query
     , member
     , notMember
-    , Data.HashMap.lookup
+    , Data.PHashMap.lookup
     -- * Construction
     , empty
     , singleton
@@ -14,15 +14,15 @@ module Data.HashMap (
     , insert
     , insertWith
     -- * Delete\/Update
-    , Data.HashMap.delete
+    , Data.PHashMap.delete
     , adjust
     , update
     , alter
     -- * Traversal
-    , Data.HashMap.map
+    , Data.PHashMap.map
     , mapWithKey
     -- * Conversion
-    , Data.HashMap.elems
+    , Data.PHashMap.elems
     , keys
     , toList
     , fromList
@@ -37,17 +37,17 @@ import Data.List hiding (insert, lookup)
 import Data.Array as A
 import Prelude as P
 
--- | A HashMap from keys @k@ to values @v@
-data (Eq k) => HashMap k v = HM {
+-- | A PHashMap from keys @k@ to values @v@
+data (Eq k) => PHashMap k v = HM {
                                     hashFn :: k -> Int32
                                   , root :: Node k v
                               }
 
-instance (Eq k, Show k, Show v) => Show (HashMap k v) where
+instance (Eq k, Show k, Show v) => Show (PHashMap k v) where
     show (HM h r) = show r
-    -- show = ("fromList hashFn "++).show.(Data.HashMap.toList)
+    -- show = ("fromList hashFn "++).show.(Data.PHashMap.toList)
 
-instance (Eq k, NFData k, NFData v) => NFData (HashMap k v) where
+instance (Eq k, NFData k, NFData v) => NFData (PHashMap k v) where
     rnf (HM f r) = f `seq` rnf r
 
 instance (Eq k, NFData k, NFData v) => NFData (Node k v) where
@@ -100,14 +100,14 @@ isEmptyNode _ = False
 hashFragment shift hash = (hash `shiftR` shift) .&. fromIntegral mask
 
 
--- | @('empty' hashFn)@ is the empty HashMap, with hashFn being the key hash function.
-empty :: (Eq k) => (k -> Int32) -> HashMap k v
+-- | @('empty' hashFn)@ is the empty PHashMap, with hashFn being the key hash function.
+empty :: (Eq k) => (k -> Int32) -> PHashMap k v
 
 empty hashFn = HM hashFn EmptyNode
 
 
--- | @('singleton' hashFn key value)@ is a single-element HashMap holding @(key, value)@
-singleton :: (Eq k) => (k -> Int32) -> k -> v -> HashMap k v
+-- | @('singleton' hashFn key value)@ is a single-element PHashMap holding @(key, value)@
+singleton :: (Eq k) => (k -> Int32) -> k -> v -> PHashMap k v
 
 singleton hashFn key value = HM hashFn $ LeafNode (hashFn key) key value
 
@@ -119,7 +119,7 @@ data Change = Removed | Modified | Nil | Added deriving Eq
 -- | The expression (@'alter' f k map@) alters the value @x@ at @k@, or absence thereof.
 -- 'alter' can be used to insert, delete, or update a value in a 'Map'.
 -- In short : @'lookup' k ('alter' f k m) = f ('lookup' k m)@.
-alter :: (Eq k) => (Maybe v -> Maybe v) -> k -> HashMap k v -> HashMap k v
+alter :: (Eq k) => (Maybe v -> Maybe v) -> k -> PHashMap k v -> PHashMap k v
 
 alter updateFn key (HM hashFn root) =
     HM hashFn $ alterNode 0 updateFn (hashFn key) key root
@@ -275,7 +275,7 @@ alterNode shift updateFn hash key node@(ArrayNode numChildren subNodes) =
 -- will insert the pair (key, value) into @mp@ if key does
 -- not exist in the map. If the key does exist, the function will
 -- insert the pair @(key, f new_value old_value)@.
-insertWith :: (Eq k) => (v -> v -> v) -> k -> v -> HashMap k v -> HashMap k v
+insertWith :: (Eq k) => (v -> v -> v) -> k -> v -> PHashMap k v -> PHashMap k v
 
 insertWith accumFn key value hashMap =
     let fn :: (v -> v -> v) -> v -> Maybe v -> Maybe v
@@ -288,7 +288,7 @@ insertWith accumFn key value hashMap =
 -- If the key is already present in the map, the associated value is
 -- replaced with the supplied value. 'insert' is equivalent to
 -- @'insertWith' 'const'@.
-insert :: (Eq k) => k -> v -> HashMap k v -> HashMap k v
+insert :: (Eq k) => k -> v -> PHashMap k v -> PHashMap k v
 
 insert = insertWith const
 
@@ -296,27 +296,27 @@ insert = insertWith const
 -- | The expression (@'update' f k map@) updates the value @x@
 -- at @k@ (if it is in the map). If (@f x@) is 'Nothing', the element is
 -- deleted. If it is (@'Just' y@), the key @k@ is bound to the new value @y@.
-update :: (Eq k) => (v -> Maybe v) -> k -> HashMap k v -> HashMap k v
+update :: (Eq k) => (v -> Maybe v) -> k -> PHashMap k v -> PHashMap k v
 
 update updateFn = alter ((=<<) updateFn)
 
 
 -- | Delete a key and its value from the map. When the key is not
 -- a member of the map, the original map is returned.
-delete :: (Eq k) => k -> HashMap k v -> HashMap k v
+delete :: (Eq k) => k -> PHashMap k v -> PHashMap k v
 
 delete = alter (const Nothing)
 
 
 -- | Update a value at a specific key with the result of the provided function.
 -- When the key is not a member of the map, the original map is returned.
-adjust :: (Eq k) => (v -> v) -> k -> HashMap k v -> HashMap k v
+adjust :: (Eq k) => (v -> v) -> k -> PHashMap k v -> PHashMap k v
 
 adjust updateFn = alter ((=<<) ((Just).updateFn))
 
 
 -- | Map a function over all values in the map.
-mapWithKey :: (Eq k) => (k -> v -> v) -> HashMap k v -> HashMap k v
+mapWithKey :: (Eq k) => (k -> v -> v) -> PHashMap k v -> PHashMap k v
 
 mapWithKey mapFn (HM hashFn root) =
     HM hashFn $ mapWithKeyNode mapFn root
@@ -344,7 +344,7 @@ arrayMap fn arr = array (bounds arr) $ P.map (\(key, value) -> (key, fn value)) 
 
 
 -- | Map a function over all values in the map.
-map :: (Eq k) => (v -> v) -> HashMap k v -> HashMap k v
+map :: (Eq k) => (v -> v) -> PHashMap k v -> PHashMap k v
 
 map fn = mapWithKey (const fn)
 
@@ -353,7 +353,7 @@ map fn = mapWithKey (const fn)
 --
 -- The function will return the corresponding value as @('Just' value)@,
 -- or 'Nothing' if the key isn't in the map.
-lookup :: (Eq k) => k -> HashMap k v -> Maybe v
+lookup :: (Eq k) => k -> PHashMap k v -> Maybe v
 
 lookup key (HM hashFn root) = lookupNode 0 (hashFn key) key root
 
@@ -384,26 +384,26 @@ lookupNode shift hash key (ArrayNode _numChildren subNodes) =
 
 -- | Find the value at a key.
 -- Calls 'error' when the element can not be found.
-(!) :: (Eq k) => HashMap k v -> k -> v
+(!) :: (Eq k) => PHashMap k v -> k -> v
 
 hashMap ! key = maybe (error "element not in the map")
                       id
-                      (Data.HashMap.lookup key hashMap)
+                      (Data.PHashMap.lookup key hashMap)
 
 
 -- | Is the key a member of the map? See also 'notMember'.
-member :: (Eq k) => k -> HashMap k v -> Bool
+member :: (Eq k) => k -> PHashMap k v -> Bool
 
-member key hashMap = maybe False (const True) (Data.HashMap.lookup key hashMap)
+member key hashMap = maybe False (const True) (Data.PHashMap.lookup key hashMap)
 
 -- | Is the key a member of the map? See also 'member'.
-notMember :: (Eq k) => k -> HashMap k v -> Bool
+notMember :: (Eq k) => k -> PHashMap k v -> Bool
 
 notMember key = not.(member key)
 
 
 -- | Convert to a list of key\/value pairs.
-toList :: (Eq k) => HashMap k v -> [(k, v)]
+toList :: (Eq k) => PHashMap k v -> [(k, v)]
 
 toList (HM _hashFn root) = toListNode root
 
@@ -426,7 +426,7 @@ toListNode (ArrayNode _numChildren subNodes) =
 -- | Build a map from a list of key\/value pairs.
 -- If the list contains more than one value for the same key, the last value
 -- for the key is retained.
-fromList :: (Eq k) => (k -> Int32) -> [(k, v)] -> HashMap k v
+fromList :: (Eq k) => (k -> Int32) -> [(k, v)] -> PHashMap k v
 
 fromList hashFn assocs = HM hashFn $ fromListNode 0 $ P.map (\(k, v) -> ((hashFn k), k, v)) assocs
 
@@ -474,12 +474,12 @@ fromListNode shift hkvs =
 
 
 -- | Return all keys of the map.
-keys :: (Eq k) => HashMap k v -> [k]
+keys :: (Eq k) => PHashMap k v -> [k]
 
 keys = (P.map fst).toList
 
 
 -- | Return all elements of the map.
-elems :: (Eq k) => HashMap k v -> [v]
+elems :: (Eq k) => PHashMap k v -> [v]
 
 elems = (P.map snd).toList

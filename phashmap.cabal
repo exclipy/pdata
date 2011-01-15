@@ -1,4 +1,4 @@
-name:               hashmap
+name:               phashmap
 version:            0.2
 cabal-version:      >= 1.2
 synopsis:           A purely functional and persistent hash map
@@ -21,6 +21,6 @@ stability:          experimental
 
 library
   build-depends:    base >= 4 && < 5, array, deepseq
-  exposed-modules:  Data.HashMap
+  exposed-modules:  Data.PHashMap
   other-modules:    Data.BitUtil
   ghc-options:      -O2

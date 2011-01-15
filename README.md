@@ -6,7 +6,7 @@ One of the prominent features of the [Clojure][1] language are a set of
 the most innovative and important is the persistent hash map based on the
 *hash array mapped trie*.
 
-This project is a port of this structure to Haskell, as Data.HashMap.  The
+This project is a port of this structure to Haskell, as Data.PHashMap.  The
 interface has been kept as consistent as possible with Data.Map.
 
 [1]: http://clojure.org/
@@ -15,11 +15,11 @@ interface has been kept as consistent as possible with Data.Map.
 
 Basic usage
 -----------
-Here's a demo of what you can do with a HashMap:
+Here's a demo of what you can do with a PHashMap:
 
-    ghci> :m + Data.HashMap
+    ghci> :m + Data.PHashMap
     ghci> empty Data.HashTable.hashString
-            -- an empty HashMap (requires a key hash function)
+            -- an empty PHashMap (requires a key hash function)
     fromList hashFn []
 
     ghci> insert "foo" 1 it
@@ -41,16 +41,16 @@ Here's a demo of what you can do with a HashMap:
     ghci> a ! "baz"  -- using (!) is unsafe
     *** Exception: array index out of range: element not in the map
 
-    ghci> Data.HashMap.lookup "bar" a
+    ghci> Data.PHashMap.lookup "bar" a
     Just 42
 
-    ghci> Data.HashMap.lookup "baz" a  -- 'lookup' returns a safe Maybe
+    ghci> Data.PHashMap.lookup "baz" a  -- 'lookup' returns a safe Maybe
     Nothing
 
     ghci> adjust succ "foo" a  -- apply a function to a value
     fromList hashFn [("qux",13),("foo",2),("bar",42)]
 
-    ghci> Data.HashMap.map succ a  -- apply a function to all values
+    ghci> Data.PHashMap.map succ a  -- apply a function to all values
     fromList hashFn [("qux",14),("foo",2),("bar",43)]
 
     ghci> keys a

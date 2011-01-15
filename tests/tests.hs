@@ -1,7 +1,7 @@
 import Test.QuickCheck
 import Test.QuickCheck.Batch
 import Data.Hashable
-import Data.HashMap as HM
+import Data.PHashMap as HM
 import Data.Int
 import Data.List (foldl', sort)
 import Data.Maybe (isNothing)
