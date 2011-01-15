@@ -7,6 +7,16 @@ import Data.List (foldl', sort)
 import Data.Maybe (isNothing)
 import Prelude as P
 
+ldelete :: (Eq k) => k -> [(k, v)] -> [(k, v)]
+ldelete _ [] = []
+ldelete k ((k', v'):xs) | k' == k   = ldelete k xs
+                        | otherwise = (k', v') : ldelete k xs
+
+lset :: (Eq k) => k -> v -> [(k, v)] -> [(k, v)]
+lset k v [] = []
+lset k v ((k', v'):xs) | k' == k   = (k, v) : lset k v xs
+                       | otherwise = (k', v') : lset k v xs
+
 prop_insert :: (Eq k, Hashable k, Eq v) => (k -> Int32) -> k -> v -> [(k, v)] -> Bool
 prop_insert hashFn k v lm =
     let hm  = fromList hashFn lm
@@ -15,14 +25,22 @@ prop_insert hashFn k v lm =
            && not (notMember k hm')
            && HM.lookup k hm' == Just v
            && hm' ! k == v
+           && (if member k hm
+                  then toList hm == lset k (hm ! k) (toList hm')
+                  else toList hm == ldelete k (toList hm')
+                  )
 
-prop_delete :: (Eq k, Hashable k) => (k -> Int32) -> k -> [(k, v)] -> Bool
+prop_delete :: (Eq k, Hashable k, Eq v) => (k -> Int32) -> k -> [(k, v)] -> Bool
 prop_delete hashFn k lm =
     let hm  = fromList hashFn lm
         hm' = delete k hm
         in    not (member k hm')
            && notMember k hm'
            && isNothing (HM.lookup k hm')
+           && (if member k hm
+                  then toList hm' == ldelete k (toList hm)
+                  else toList hm' == toList hm
+                  )
 
 prop_fromList :: (Eq k, Hashable k, Ord k, Eq v, Ord v) => (k -> Int32) -> [(k, v)] -> Bool
 prop_fromList hashFn lm =
