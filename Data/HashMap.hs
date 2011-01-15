@@ -312,7 +312,7 @@ delete = alter (const Nothing)
 -- When the key is not a member of the map, the original map is returned.
 adjust :: (Eq k) => (v -> v) -> k -> HashMap k v -> HashMap k v
 
-adjust updateFn = update ((Just).updateFn)
+adjust updateFn = alter ((=<<) ((Just).updateFn))
 
 
 -- | Map a function over all values in the map.
@@ -338,15 +338,15 @@ mapWithKeyNode mapFn (ArrayNode numChildren subNodes) =
     ArrayNode numChildren $ arrayMap (mapWithKeyNode mapFn) subNodes
 
 
+arrayMap :: (Ix i) => (a -> a) -> Array i a -> Array i a
+
+arrayMap fn arr = array (bounds arr) $ P.map (\(key, value) -> (key, fn value)) $ A.assocs arr
+
+
 -- | Map a function over all values in the map.
 map :: (Eq k) => (v -> v) -> HashMap k v -> HashMap k v
 
 map fn = mapWithKey (const fn)
-
-
-arrayMap :: (Ix i) => (a -> a) -> Array i a -> Array i a
-
-arrayMap fn arr = array (bounds arr) $ P.map (\(key, value) -> (key, fn value)) $ A.assocs arr
 
 
 -- | Lookup the value at a key in the map.

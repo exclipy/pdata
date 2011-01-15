@@ -5,6 +5,7 @@ import Data.HashMap as HM
 import Data.Int
 import Data.List (foldl', sort)
 import Data.Maybe (isNothing)
+import Prelude as P
 
 prop_insert :: (Eq k, Hashable k, Eq v) => (k -> Int32) -> k -> v -> [(k, v)] -> Bool
 prop_insert hashFn k v lm =
@@ -24,10 +25,24 @@ prop_delete hashFn k lm =
            && isNothing (HM.lookup k hm')
 
 prop_fromList :: (Eq k, Hashable k, Ord k, Eq v, Ord v) => (k -> Int32) -> [(k, v)] -> Bool
-prop_fromList hashFn list =
-    let hm = fromList hashFn list
-        hm' = foldl' (\hm (k,v) -> insert k v hm) (empty hashFn) list
+prop_fromList hashFn lm =
+    let hm = fromList hashFn lm
+        hm' = foldl' (\hm (k,v) -> insert k v hm) (empty hashFn) lm
         in sort (toList hm) == sort (toList hm')
+
+prop_toList :: (Eq k, Hashable k, Ord k, Eq v, Ord v) => (k -> Int32) -> [(k, v)] -> Bool
+prop_toList hashFn lm =
+    let hm = fromList hashFn lm
+        lm' = toList hm
+        ks = keys hm
+        ks' = P.map fst lm'
+        els = elems hm
+        els' = P.map snd lm'
+        els'' = P.map (\k -> hm ! k) ks
+        in    ks == ks'
+           && els == els'
+           && els == els''
+
 
 options = TestOptions
       { no_of_tests         = 200
@@ -41,4 +56,6 @@ main = runTests "tests" options
     , run (prop_delete (fromIntegral.(`mod` 2)) :: Int -> [(Int,Int)] -> Bool)
     , run (prop_fromList fromIntegral :: [(Int, Int)] -> Bool)
     , run (prop_fromList (fromIntegral.(`mod` 2)) :: [(Int, Int)] -> Bool)
+    , run (prop_toList fromIntegral :: [(Int, Int)] -> Bool)
+    , run (prop_toList (fromIntegral.(`mod` 2)) :: [(Int, Int)] -> Bool)
     ]
