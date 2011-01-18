@@ -11,7 +11,7 @@ import Data.Hashable (Hashable(hash))
 import Data.Int (Int32)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C
-import qualified Data.PHashMap as HM
+import qualified Data.HamtMap as HM
 import Data.List (foldl')
 import Data.Maybe (fromMaybe)
 import Prelude hiding (lookup)
@@ -24,7 +24,7 @@ hashBS = fromIntegral . hash
 
 main :: IO ()
 main = do
-    let hmbs = HM.fromList hashBS elemsBS :: HM.PHashMap BS.ByteString Int
+    let hmbs = HM.fromList hashBS elemsBS :: HM.HamtMap BS.ByteString Int
     defaultMainWith defaultConfig
         (liftIO . evaluate $ rnf [hmbs])
         [ bench "fromList" $ nf (HM.fromList hashBS) elemsBS
@@ -39,13 +39,13 @@ main = do
     elemsBS = zip keysBS [1..n]
     keysBS  = rnd 8 n
 
-lookup :: Eq k => [k] -> HM.PHashMap k Int -> Int
+lookup :: Eq k => [k] -> HM.HamtMap k Int -> Int
 lookup xs m = foldl' (\z k -> fromMaybe z (HM.lookup k m)) 0 xs
 
-insert :: Eq k => [(k, Int)] -> HM.PHashMap k Int -> HM.PHashMap k Int
+insert :: Eq k => [(k, Int)] -> HM.HamtMap k Int -> HM.HamtMap k Int
 insert xs m0 = foldl' (\m (k, v) -> HM.insert k v m) m0 xs
 
-delete :: Eq k => [k] -> HM.PHashMap k Int -> HM.PHashMap k Int
+delete :: Eq k => [k] -> HM.HamtMap k Int -> HM.HamtMap k Int
 delete xs m0 = foldl' (\m k -> HM.delete k m) m0 xs
 
 -- | Generate a number of fixed length strings where the content of
