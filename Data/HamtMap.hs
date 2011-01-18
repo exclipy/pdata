@@ -1,3 +1,26 @@
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  Data.HamtMap
+-- Copyright   :  (c) Kevin Wu Won 2011
+-- License     :  BSD-style
+-- Maintainer  :  exclipy@gmail.com
+-- Stability   :  experimental
+-- Portability :  portable
+--
+-- An implementation of maps from keys to values (dictionaries) based on the
+-- hash array mapped trie.
+--
+-- Since many function names (but not the type name) clash with
+-- "Prelude" names, this module is usually imported @qualified@, e.g.
+--
+-- >  import qualified Data.HamtMap as HM
+--
+-- This data structure is based on Phil Bagwell's hash array mapped trie,
+-- which is described by his original paper:
+--
+--    * <http://lampwww.epfl.ch/papers/idealhashtrees.pdf>
+-----------------------------------------------------------------------------
+
 module Data.HamtMap (
     -- * HamtMap type
       HamtMap
