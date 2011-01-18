@@ -61,6 +61,18 @@ prop_toList hashFn lm =
            && els == els'
            && els == els''
 
+prop_map :: (Eq k, Integral v) => (k -> Int32) -> [(k, v)] -> Bool
+prop_map hashFn lm =
+    let hm = fromList hashFn lm
+        lm' = toList hm
+        in toList (HM.map (*2) hm) == P.map (\(x,y) -> (x, y*2)) lm'
+
+prop_filter :: (Eq k, Integral v) => (k -> Int32) -> [(k, v)] -> Bool
+prop_filter hashFn lm =
+    let hm = fromList hashFn lm
+        lm' = toList hm
+        in toList (HM.filter even hm) == P.filter (\(x,y) -> even y) lm'
+
 
 options = TestOptions
       { no_of_tests         = 200
@@ -76,4 +88,8 @@ main = runTests "tests" options
     , run (prop_fromList (fromIntegral.(`mod` 2)) :: [(Int, Int)] -> Bool)
     , run (prop_toList fromIntegral :: [(Int, Int)] -> Bool)
     , run (prop_toList (fromIntegral.(`mod` 2)) :: [(Int, Int)] -> Bool)
+    , run (prop_map fromIntegral :: [(Int, Int)] -> Bool)
+    , run (prop_map (fromIntegral.(`mod` 2)) :: [(Int, Int)] -> Bool)
+    , run (prop_filter fromIntegral :: [(Int, Int)] -> Bool)
+    , run (prop_filter (fromIntegral.(`mod` 2)) :: [(Int, Int)] -> Bool)
     ]

@@ -44,6 +44,9 @@ module Data.HamtMap (
     -- * Traversal
     , Data.HamtMap.map
     , mapWithKey
+    -- * Filter
+    , Data.HamtMap.filter
+    , filterWithKey
     -- * Conversion
     , Data.HamtMap.elems
     , keys
@@ -120,6 +123,14 @@ arraynodeMin = 8  -- minimum size of an ArrayNode
 isEmptyNode :: Node k v -> Bool
 isEmptyNode EmptyNode = True
 isEmptyNode _ = False
+
+
+isTipNode :: (Eq k) => Node k v -> Bool
+isTipNode EmptyNode               = True
+isTipNode (LeafNode _ _ _)        = True
+isTipNode (HashCollisionNode _ _) = True
+isTipNode _                       = False
+
 
 hashFragment shift hash = (hash `shiftR` shift) .&. fromIntegral mask
 
@@ -240,7 +251,7 @@ alterNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
                    -- Note: it's possible to have a single-element BitmapIndexedNode
                    -- if there are two keys with the same subHash in the trie.
                    EmptyNode
-           else if bound' == 0 && isLeafNode (subNodes' A.! 0)
+           else if bound' == 0 && isTipNode (subNodes' A.! 0)
               then -- Pack a BitmapIndexedNode into a LeafNode
                    subNodes' A.! 0
            else if change == Added && bound' > bmnodeMax - 1
@@ -248,9 +259,6 @@ alterNode shift updateFn hash key bmnode@(BitmapIndexedNode bitmap subNodes) =
                    expandBitmapNode shift subHash child' bitmap subNodes
               else BitmapIndexedNode bitmap' subNodes'
     where
-    isLeafNode (LeafNode _ _ _) = True
-    isLeafNode _ = False
-
     expandBitmapNode :: (Eq k) =>
         Int -> Int32 -> Node k v -> Int32 -> Array Int32 (Node k v) -> Node k v
     expandBitmapNode shift subHash node' bitmap subNodes =
@@ -288,7 +296,7 @@ alterNode shift updateFn hash key node@(ArrayNode numChildren subNodes) =
                                    then EmptyNode
                                    else subNodes A.! i)
                          [0..pred chunk]
-            subNodes' = listArray (0, (numChildren-2)) $ filter (not.isEmptyNode) elems'
+            subNodes' = listArray (0, (numChildren-2)) $ P.filter (not.isEmptyNode) elems'
             listToBitmap = foldr (\on bm -> (bm `shiftL` 1) .|. (if on then 1 else 0)) 0
             bitmap = listToBitmap $ P.map (not.isEmptyNode) elems'
             in BitmapIndexedNode bitmap subNodes'
@@ -372,6 +380,57 @@ map :: (Eq k) => (v -> v) -> HamtMap k v -> HamtMap k v
 
 map fn = mapWithKey (const fn)
 
+
+-- | Filter for all values that satisify a predicate.
+filterWithKey :: (Eq k) => (k -> v -> Bool) -> HamtMap k v -> HamtMap k v
+
+filterWithKey fn (HM hashFn root) =
+    HM hashFn $ filterWithKeyNode fn root
+
+filterWithKeyNode :: (Eq k) => (k -> v -> Bool) -> Node k v -> Node k v
+
+filterWithKeyNode _fn EmptyNode = EmptyNode
+
+filterWithKeyNode fn node@(LeafNode hash key value) | fn key value = node
+                                                    | otherwise    = EmptyNode
+
+filterWithKeyNode fn (HashCollisionNode hash pairs) =
+    let pairs' = P.filter (uncurry fn) pairs
+        in case pairs' of
+                []             -> EmptyNode
+                [(key, value)] -> LeafNode hash key value
+                otherwise      -> HashCollisionNode hash pairs'
+
+filterWithKeyNode fn (BitmapIndexedNode bitmap subNodes) =
+    let mapped = P.map (filterWithKeyNode fn) (A.elems subNodes)
+        zipped = zip (bitmapToIndices bitmap) mapped
+        filtered = P.filter (\(ix, subNode) -> not (isEmptyNode subNode)) zipped
+        (indices', subNodes') = unzip filtered
+        n = fromIntegral $ length filtered
+        in case subNodes' of
+                []                      -> EmptyNode
+                [node] | isTipNode node -> node
+                otherwise               -> BitmapIndexedNode (indicesToBitmap indices')
+                                                             (listArray (0, n-1) subNodes')
+
+filterWithKeyNode fn (ArrayNode numChildren subNodes) =
+    let mapped = P.map (filterWithKeyNode fn) (A.elems subNodes)
+        zipped = zip [0..31] mapped
+        filtered = P.filter (\(ix, subNode) -> not (isEmptyNode subNode)) zipped
+        (indices', subNodes') = unzip filtered
+        n = fromIntegral $ length filtered
+        in case filtered of
+                [] -> EmptyNode
+                [(ix, node)] | isTipNode node -> node
+                els | n <= bmnodeMax -> BitmapIndexedNode (indicesToBitmap indices')
+                                                          (listArray (0, n-1) subNodes')
+                    | otherwise      -> ArrayNode n (listArray (0, 31) mapped)
+
+
+-- | Filter for all values that satisify a predicate.
+filter :: (Eq k) => (v -> Bool) -> HamtMap k v -> HamtMap k v
+
+filter fn = filterWithKey (const fn)
 
 -- | Lookup the value at a key in the map.
 --
@@ -462,7 +521,7 @@ fromListNode shift combineFn hkvs =
                   -- this will alternately reverse and unreverse the list on each level down
         dividedList = A.elems divided
         subNodes = listArray (0, mask) $ P.map (fromListNode (shift+shiftStep) combineFn) $ dividedList
-        numChildren = length $ filter (not.null) dividedList
+        numChildren = length $ P.filter (not.null) dividedList
         in case hkvs of
                 []          -> EmptyNode
                 [(h, k, v)] -> LeafNode h k v
@@ -488,7 +547,7 @@ fromListNode shift combineFn hkvs =
     makeBMNode :: (Eq k) => Int -> Array Int32 (Node k v) -> Node k v
     makeBMNode numChildren subNodes =
         let subNodeList = A.elems subNodes
-            subNodes' = listArray (0, (fromIntegral numChildren-1)) $ filter (not.isEmptyNode) subNodeList
+            subNodes' = listArray (0, (fromIntegral numChildren-1)) $ P.filter (not.isEmptyNode) subNodeList
             listToBitmap = foldr (\on bm -> (bm `shiftL` 1) .|. (if on then 1 else 0)) 0
             bitmap = listToBitmap $ P.map (not.isEmptyNode) subNodeList
             in BitmapIndexedNode bitmap subNodes'

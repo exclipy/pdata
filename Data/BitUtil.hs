@@ -3,6 +3,7 @@ module Data.BitUtil where
 import Data.Bits
 import Data.Word
 import Data.Int
+import Data.List (foldl')
 
 -- Bit operations
 
@@ -21,6 +22,9 @@ bitmapToIndices bitmap = loop 0 bitmap
           loop 32 _ = []
           loop ix bitmap | bitmap .&. 1 == 0 = loop (ix+1) (bitmap `shiftR` 1)
                          | otherwise         = ix:(loop (ix+1) (bitmap `shiftR` 1))
+
+indicesToBitmap :: (Bits a) => [Int] -> a
+indicesToBitmap = foldl' (\bm ix -> bm .|. (1 `shiftL` ix)) 0
 
 bitCount32 :: (Integral a) => Int32 -> a
 bitCount32 x = bitCount8 ((x `shiftR` 24) .&. 0xff) +
