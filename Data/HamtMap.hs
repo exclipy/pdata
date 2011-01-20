@@ -345,24 +345,18 @@ adjust updateFn = alter ((=<<) ((Just).updateFn))
 -- | Map a function over all values in the map.
 mapWithKey :: (Eq k, Hashable k) => (k -> v -> v) -> HamtMap k v -> HamtMap k v
 
-mapWithKey mapFn root =
-    mapWithKeyNode mapFn root
+mapWithKey _mapFn EmptyNode = EmptyNode
 
+mapWithKey mapFn (LeafNode h key value) = LeafNode h key $ mapFn key value
 
-mapWithKeyNode :: (Eq k, Hashable k) => (k -> v -> v) -> HamtMap k v -> HamtMap k v
-
-mapWithKeyNode _mapFn EmptyNode = EmptyNode
-
-mapWithKeyNode mapFn (LeafNode h key value) = LeafNode h key $ mapFn key value
-
-mapWithKeyNode mapFn (HashCollisionNode h pairs) =
+mapWithKey mapFn (HashCollisionNode h pairs) =
     HashCollisionNode h (P.map (\(key, value) -> (key, mapFn key value)) pairs)
 
-mapWithKeyNode mapFn (BitmapIndexedNode bitmap subNodes) =
-    BitmapIndexedNode bitmap $ arrayMap (mapWithKeyNode mapFn) subNodes
+mapWithKey mapFn (BitmapIndexedNode bitmap subNodes) =
+    BitmapIndexedNode bitmap $ arrayMap (mapWithKey mapFn) subNodes
 
-mapWithKeyNode mapFn (ArrayNode numChildren subNodes) =
-    ArrayNode numChildren $ arrayMap (mapWithKeyNode mapFn) subNodes
+mapWithKey mapFn (ArrayNode numChildren subNodes) =
+    ArrayNode numChildren $ arrayMap (mapWithKey mapFn) subNodes
 
 
 arrayMap :: (Ix i) => (a -> a) -> Array i a -> Array i a
@@ -379,25 +373,20 @@ map fn = mapWithKey (const fn)
 -- | Filter for all values that satisify a predicate.
 filterWithKey :: (Eq k, Hashable k) => (k -> v -> Bool) -> HamtMap k v -> HamtMap k v
 
-filterWithKey fn root =
-    filterWithKeyNode fn root
+filterWithKey _fn EmptyNode = EmptyNode
 
-filterWithKeyNode :: (Eq k, Hashable k) => (k -> v -> Bool) -> HamtMap k v -> HamtMap k v
-
-filterWithKeyNode _fn EmptyNode = EmptyNode
-
-filterWithKeyNode fn node@(LeafNode h key value) | fn key value = node
+filterWithKey fn node@(LeafNode h key value) | fn key value = node
                                                  | otherwise    = EmptyNode
 
-filterWithKeyNode fn (HashCollisionNode h pairs) =
+filterWithKey fn (HashCollisionNode h pairs) =
     let pairs' = P.filter (uncurry fn) pairs
         in case pairs' of
                 []             -> EmptyNode
                 [(key, value)] -> LeafNode h key value
                 otherwise      -> HashCollisionNode h pairs'
 
-filterWithKeyNode fn (BitmapIndexedNode bitmap subNodes) =
-    let mapped = P.map (filterWithKeyNode fn) (A.elems subNodes)
+filterWithKey fn (BitmapIndexedNode bitmap subNodes) =
+    let mapped = P.map (filterWithKey fn) (A.elems subNodes)
         zipped = zip (bitmapToIndices bitmap) mapped
         filtered = P.filter (\(ix, subNode) -> not (isEmptyNode subNode)) zipped
         (indices', subNodes') = unzip filtered
@@ -408,8 +397,8 @@ filterWithKeyNode fn (BitmapIndexedNode bitmap subNodes) =
                 otherwise               -> BitmapIndexedNode (indicesToBitmap indices')
                                                              (listArray (0, n-1) subNodes')
 
-filterWithKeyNode fn (ArrayNode numChildren subNodes) =
-    let mapped = P.map (filterWithKeyNode fn) (A.elems subNodes)
+filterWithKey fn (ArrayNode numChildren subNodes) =
+    let mapped = P.map (filterWithKey fn) (A.elems subNodes)
         zipped = zip [0..31] mapped
         filtered = P.filter (\(ix, subNode) -> not (isEmptyNode subNode)) zipped
         (indices', subNodes') = unzip filtered
@@ -483,22 +472,17 @@ notMember key = not.(member key)
 -- | Convert to a list of key\/value pairs.
 toList :: (Eq k, Hashable k) => HamtMap k v -> [(k, v)]
 
-toList root = toListNode root
+toList EmptyNode = []
 
+toList (LeafNode _hash key value) = [(key, value)]
 
-toListNode :: (Eq k, Hashable k) => HamtMap k v -> [(k, v)]
+toList (HashCollisionNode _hash pairs) = pairs
 
-toListNode EmptyNode = []
+toList (BitmapIndexedNode _bitmap subNodes) =
+    concat $ P.map toList $ A.elems subNodes
 
-toListNode (LeafNode _hash key value) = [(key, value)]
-
-toListNode (HashCollisionNode _hash pairs) = pairs
-
-toListNode (BitmapIndexedNode _bitmap subNodes) =
-    concat $ P.map toListNode $ A.elems subNodes
-
-toListNode (ArrayNode _numChildren subNodes) =
-    concat $ P.map toListNode $ A.elems subNodes
+toList (ArrayNode _numChildren subNodes) =
+    concat $ P.map toList $ A.elems subNodes
 
 
 -- | Build a map from a list of key\/value pairs with a combining function.
