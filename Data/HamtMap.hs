@@ -395,7 +395,7 @@ filterWithKeyNode :: (Eq k) => (k -> v -> Bool) -> Node k v -> Node k v
 filterWithKeyNode _fn EmptyNode = EmptyNode
 
 filterWithKeyNode fn node@(LeafNode h key value) | fn key value = node
-                                                    | otherwise    = EmptyNode
+                                                 | otherwise    = EmptyNode
 
 filterWithKeyNode fn (HashCollisionNode h pairs) =
     let pairs' = P.filter (uncurry fn) pairs
