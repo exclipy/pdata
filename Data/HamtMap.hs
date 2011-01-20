@@ -67,42 +67,34 @@ import Data.Array as A
 import Prelude as P
 
 -- | A HamtMap from keys @k@ to values @v@
-data (Eq k, Hashable k) => HamtMap k v = HM { root :: Node k v }
-
-instance (Eq k, Hashable k, Show k, Show v) => Show (HamtMap k v) where
-    show (HM r) = show r
-    -- show = ("fromList "++).show.(Data.HamtMap.toList)
+data (Eq k, Hashable k) => HamtMap k v = EmptyNode |
+                                         LeafNode {
+                                               h :: Int32
+                                             , key :: k
+                                             , value :: v
+                                         } |
+                                         HashCollisionNode {
+                                               h :: Int32
+                                             , pairs :: [(k, v)]
+                                         } |
+                                         BitmapIndexedNode {
+                                               bitmap :: Int32
+                                             , subNodes :: Array Int32 (HamtMap k v)
+                                         } |
+                                         ArrayNode {
+                                               numChildren :: Int32
+                                             , subNodes :: Array Int32 (HamtMap k v)
+                                         }
 
 instance (Eq k, Hashable k, NFData k, NFData v) => NFData (HamtMap k v) where
-    rnf (HM r) = rnf r
-
-instance (Eq k, NFData k, NFData v) => NFData (Node k v) where
     rnf EmptyNode = ()
     rnf (LeafNode h k v) = rnf h `seq` rnf k `seq` rnf v
     rnf (HashCollisionNode h xs) = rnf h `seq` rnf xs
     rnf (BitmapIndexedNode bm arr) = rnf bm `seq` rnf arr
     rnf (ArrayNode n arr) = rnf n `seq` rnf arr
 
-data (Eq k) => Node k v = EmptyNode |
-                          LeafNode {
-                                h :: Int32
-                              , key :: k
-                              , value :: v
-                          } |
-                          HashCollisionNode {
-                                h :: Int32
-                              , pairs :: [(k, v)]
-                          } |
-                          BitmapIndexedNode {
-                                bitmap :: Int32
-                              , subNodes :: Array Int32 (Node k v)
-                          } |
-                          ArrayNode {
-                                numChildren :: Int32
-                              , subNodes :: Array Int32 (Node k v)
-                          }
 
-instance (Eq k, Show k, Show v) => Show (Node k v) where
+instance (Eq k, Hashable k, Show k, Show v) => Show (HamtMap k v) where
     show EmptyNode = ""
     show (LeafNode _h key value) = show (key, value)
     show (HashCollisionNode _h pairs) = "h" ++ show pairs
@@ -119,12 +111,12 @@ arraynodeMin = 8  -- minimum size of an ArrayNode
 
 -- Some miscellaneous helper functions
 
-isEmptyNode :: Node k v -> Bool
+isEmptyNode :: HamtMap k v -> Bool
 isEmptyNode EmptyNode = True
 isEmptyNode _ = False
 
 
-isTipNode :: (Eq k) => Node k v -> Bool
+isTipNode :: (Eq k, Hashable k) => HamtMap k v -> Bool
 isTipNode EmptyNode               = True
 isTipNode (LeafNode _ _ _)        = True
 isTipNode (HashCollisionNode _ _) = True
@@ -141,13 +133,13 @@ hashFragment shift h = (h `shiftR` shift) .&. fromIntegral mask
 -- | The empty HamtMap.
 empty :: (Eq k, Hashable k) => HamtMap k v
 
-empty = HM EmptyNode
+empty = EmptyNode
 
 
 -- | @('singleton' key value)@ is a single-element HamtMap holding @(key, value)@
 singleton :: (Eq k, Hashable k) => k -> v -> HamtMap k v
 
-singleton key value = HM $ LeafNode (hash key) key value
+singleton key value = LeafNode (hash key) key value
 
 
 -- Helper data type for alterNode
@@ -159,11 +151,11 @@ data Change = Removed | Modified | Nil | Added deriving Eq
 -- In short : @'lookup' k ('alter' f k m) = f ('lookup' k m)@.
 alter :: (Eq k, Hashable k) => (Maybe v -> Maybe v) -> k -> HamtMap k v -> HamtMap k v
 
-alter updateFn key (HM root) =
-    HM $ alterNode 0 updateFn (hash key) key root
+alter updateFn key root =
+    alterNode 0 updateFn (hash key) key root
 
 
-alterNode :: (Eq k) => Int -> (Maybe v -> Maybe v) -> Int32 -> k -> Node k v -> Node k v
+alterNode :: (Eq k, Hashable k) => Int -> (Maybe v -> Maybe v) -> Int32 -> k -> HamtMap k v -> HamtMap k v
 
 alterNode _shift updateFn h key EmptyNode =
     maybe EmptyNode
@@ -180,7 +172,7 @@ alterNode shift updateFn h' key' node@(LeafNode h key value) =
                       then node
                       else combineNodes shift node node'
     where
-    combineNodes :: (Eq k) => Int -> Node k v -> Node k v -> Node k v
+    combineNodes :: (Eq k, Hashable k) => Int -> HamtMap k v -> HamtMap k v -> HamtMap k v
     combineNodes shift node1@(LeafNode h1 k1 v1) node2@(LeafNode h2 k2 v2) =
         let h1 = nodeHash node1
             h2 = nodeHash node2
@@ -262,8 +254,8 @@ alterNode shift updateFn h key bmnode@(BitmapIndexedNode bitmap subNodes) =
                    expandBitmapNode shift subHash child' bitmap subNodes
               else BitmapIndexedNode bitmap' subNodes'
     where
-    expandBitmapNode :: (Eq k) =>
-        Int -> Int32 -> Node k v -> Int32 -> Array Int32 (Node k v) -> Node k v
+    expandBitmapNode :: (Eq k, Hashable k) =>
+        Int -> Int32 -> HamtMap k v -> Int32 -> Array Int32 (HamtMap k v) -> HamtMap k v
     expandBitmapNode shift subHash node' bitmap subNodes =
         let assocs = zip (bitmapToIndices bitmap) (A.elems subNodes)
             assocs' = (subHash, node'):assocs
@@ -293,7 +285,7 @@ alterNode shift updateFn h key node@(ArrayNode numChildren subNodes) =
               then packArrayNode subHash numChildren subNodes
               else ArrayNode numChildren' $ subNodes // [(subHash, child')]
     where
-    packArrayNode :: (Eq k) => Int32 -> Int32 -> Array Int32 (Node k v) -> Node k v
+    packArrayNode :: (Eq k, Hashable k) => Int32 -> Int32 -> Array Int32 (HamtMap k v) -> HamtMap k v
     packArrayNode subHashToRemove numChildren subNodes =
         let elems' = P.map (\i -> if i == subHashToRemove
                                    then EmptyNode
@@ -353,11 +345,11 @@ adjust updateFn = alter ((=<<) ((Just).updateFn))
 -- | Map a function over all values in the map.
 mapWithKey :: (Eq k, Hashable k) => (k -> v -> v) -> HamtMap k v -> HamtMap k v
 
-mapWithKey mapFn (HM root) =
-    HM $ mapWithKeyNode mapFn root
+mapWithKey mapFn root =
+    mapWithKeyNode mapFn root
 
 
-mapWithKeyNode :: (Eq k) => (k -> v -> v) -> Node k v -> Node k v
+mapWithKeyNode :: (Eq k, Hashable k) => (k -> v -> v) -> HamtMap k v -> HamtMap k v
 
 mapWithKeyNode _mapFn EmptyNode = EmptyNode
 
@@ -387,10 +379,10 @@ map fn = mapWithKey (const fn)
 -- | Filter for all values that satisify a predicate.
 filterWithKey :: (Eq k, Hashable k) => (k -> v -> Bool) -> HamtMap k v -> HamtMap k v
 
-filterWithKey fn (HM root) =
-    HM $ filterWithKeyNode fn root
+filterWithKey fn root =
+    filterWithKeyNode fn root
 
-filterWithKeyNode :: (Eq k) => (k -> v -> Bool) -> Node k v -> Node k v
+filterWithKeyNode :: (Eq k, Hashable k) => (k -> v -> Bool) -> HamtMap k v -> HamtMap k v
 
 filterWithKeyNode _fn EmptyNode = EmptyNode
 
@@ -441,10 +433,10 @@ filter fn = filterWithKey (const fn)
 -- or 'Nothing' if the key isn't in the map.
 lookup :: (Eq k, Hashable k) => k -> HamtMap k v -> Maybe v
 
-lookup key (HM root) = lookupNode 0 (hash key) key root
+lookup key root = lookupNode 0 (hash key) key root
 
 
-lookupNode :: (Eq k) => Int -> Int32 -> k -> Node k v -> Maybe v
+lookupNode :: (Eq k, Hashable k) => Int -> Int32 -> k -> HamtMap k v -> Maybe v
 
 lookupNode _ _ _ EmptyNode = Nothing
 
@@ -491,10 +483,10 @@ notMember key = not.(member key)
 -- | Convert to a list of key\/value pairs.
 toList :: (Eq k, Hashable k) => HamtMap k v -> [(k, v)]
 
-toList (HM root) = toListNode root
+toList root = toListNode root
 
 
-toListNode :: (Eq k) => Node k v -> [(k, v)]
+toListNode :: (Eq k, Hashable k) => HamtMap k v -> [(k, v)]
 
 toListNode EmptyNode = []
 
@@ -513,10 +505,10 @@ toListNode (ArrayNode _numChildren subNodes) =
 fromListWith :: (Eq k, Hashable k) => (v -> v -> v) -> [(k, v)] -> HamtMap k v
 
 fromListWith combineFn assocs =
-    HM $ fromListNode 0 combineFn $ P.map (\(k, v) -> ((hash k), k, v)) assocs
+    fromListNode 0 combineFn $ P.map (\(k, v) -> ((hash k), k, v)) assocs
 
 
-fromListNode :: (Eq k) => Int -> (v -> v -> v) -> [(Int32, k, v)] -> Node k v
+fromListNode :: (Eq k, Hashable k) => Int -> (v -> v -> v) -> [(Int32, k, v)] -> HamtMap k v
 
 fromListNode shift combineFn hkvs =
     let subHashed = P.map (\triple@(h, k, v) -> (hashFragment shift h, triple)) hkvs
@@ -547,7 +539,7 @@ fromListNode shift combineFn hkvs =
                 _ | otherwise ->
                     makeBMNode numChildren subNodes
     where
-    makeBMNode :: (Eq k) => Int -> Array Int32 (Node k v) -> Node k v
+    makeBMNode :: (Eq k, Hashable k) => Int -> Array Int32 (HamtMap k v) -> HamtMap k v
     makeBMNode numChildren subNodes =
         let subNodeList = A.elems subNodes
             subNodes' = listArray (0, (fromIntegral numChildren-1)) $ P.filter (not.isEmptyNode) subNodeList
