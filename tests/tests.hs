@@ -7,6 +7,16 @@ import Data.List (foldl', sort)
 import Data.Maybe (isNothing)
 import Prelude as P
 
+newtype Inty = Inty Int deriving (Eq, Show, Ord)
+
+instance Hashable Inty where
+    hash (Inty i) = fromIntegral (hash i `mod` 2)
+
+instance Arbitrary Inty where
+    arbitrary = do
+        x <- arbitrary
+        return $ Inty x
+
 ldelete :: (Eq k) => k -> [(k, v)] -> [(k, v)]
 ldelete _ [] = []
 ldelete k ((k', v'):xs) | k' == k   = ldelete k xs
@@ -17,9 +27,9 @@ lset k v [] = []
 lset k v ((k', v'):xs) | k' == k   = (k, v) : lset k v xs
                        | otherwise = (k', v') : lset k v xs
 
-prop_insert :: (Eq k, Hashable k, Eq v) => (k -> Int32) -> k -> v -> [(k, v)] -> Bool
-prop_insert hashFn k v lm =
-    let hm  = fromList hashFn lm
+prop_insert :: (Eq k, Hashable k, Eq v) => k -> v -> [(k, v)] -> Bool
+prop_insert k v lm =
+    let hm  = fromList lm
         hm' = insert k v hm
         in    member k hm'
            && not (notMember k hm')
@@ -30,9 +40,9 @@ prop_insert hashFn k v lm =
                   else toList hm == ldelete k (toList hm')
                   )
 
-prop_delete :: (Eq k, Hashable k, Eq v) => (k -> Int32) -> k -> [(k, v)] -> Bool
-prop_delete hashFn k lm =
-    let hm  = fromList hashFn lm
+prop_delete :: (Eq k, Hashable k, Eq v) => k -> [(k, v)] -> Bool
+prop_delete k lm =
+    let hm  = fromList lm
         hm' = delete k hm
         in    not (member k hm')
            && notMember k hm'
@@ -42,15 +52,15 @@ prop_delete hashFn k lm =
                   else toList hm' == toList hm
                   )
 
-prop_fromList :: (Eq k, Hashable k, Ord k, Eq v, Ord v) => (k -> Int32) -> [(k, v)] -> Bool
-prop_fromList hashFn lm =
-    let hm = fromList hashFn lm
-        hm' = foldl' (\hm (k,v) -> insert k v hm) (empty hashFn) lm
+prop_fromList :: (Eq k, Hashable k, Ord k, Eq v, Ord v) => [(k, v)] -> Bool
+prop_fromList lm =
+    let hm = fromList lm
+        hm' = foldl' (\hm (k,v) -> insert k v hm) empty lm
         in sort (toList hm) == sort (toList hm')
 
-prop_toList :: (Eq k, Hashable k, Ord k, Eq v, Ord v) => (k -> Int32) -> [(k, v)] -> Bool
-prop_toList hashFn lm =
-    let hm = fromList hashFn lm
+prop_toList :: (Eq k, Hashable k, Eq v) => [(k, v)] -> Bool
+prop_toList lm =
+    let hm = fromList lm
         lm' = toList hm
         ks = keys hm
         ks' = P.map fst lm'
@@ -61,15 +71,15 @@ prop_toList hashFn lm =
            && els == els'
            && els == els''
 
-prop_map :: (Eq k, Integral v) => (k -> Int32) -> [(k, v)] -> Bool
-prop_map hashFn lm =
-    let hm = fromList hashFn lm
+prop_map :: (Eq k, Hashable k, Integral v) => [(k, v)] -> Bool
+prop_map lm =
+    let hm = fromList lm
         lm' = toList hm
         in toList (HM.map (*2) hm) == P.map (\(x,y) -> (x, y*2)) lm'
 
-prop_filter :: (Eq k, Integral v) => (k -> Int32) -> [(k, v)] -> Bool
-prop_filter hashFn lm =
-    let hm = fromList hashFn lm
+prop_filter :: (Eq k, Hashable k, Integral v) => [(k, v)] -> Bool
+prop_filter lm =
+    let hm = fromList lm
         lm' = toList hm
         in toList (HM.filter even hm) == P.filter (\(x,y) -> even y) lm'
 
@@ -80,16 +90,16 @@ options = TestOptions
       , debug_tests         = False }
 
 main = runTests "tests" options
-    [ run (prop_insert fromIntegral :: Int -> Int -> [(Int,Int)] -> Bool)
-    , run (prop_insert (fromIntegral.(`mod` 2)) :: Int -> Int -> [(Int,Int)] -> Bool)
-    , run (prop_delete fromIntegral :: Int -> [(Int, Int)] -> Bool)
-    , run (prop_delete (fromIntegral.(`mod` 2)) :: Int -> [(Int,Int)] -> Bool)
-    , run (prop_fromList fromIntegral :: [(Int, Int)] -> Bool)
-    , run (prop_fromList (fromIntegral.(`mod` 2)) :: [(Int, Int)] -> Bool)
-    , run (prop_toList fromIntegral :: [(Int, Int)] -> Bool)
-    , run (prop_toList (fromIntegral.(`mod` 2)) :: [(Int, Int)] -> Bool)
-    , run (prop_map fromIntegral :: [(Int, Int)] -> Bool)
-    , run (prop_map (fromIntegral.(`mod` 2)) :: [(Int, Int)] -> Bool)
-    , run (prop_filter fromIntegral :: [(Int, Int)] -> Bool)
-    , run (prop_filter (fromIntegral.(`mod` 2)) :: [(Int, Int)] -> Bool)
+    [ run (prop_insert :: Int -> Int -> [(Int,Int)] -> Bool)
+    , run (prop_insert :: Inty -> Int -> [(Inty,Int)] -> Bool)
+    , run (prop_delete :: Int -> [(Int, Int)] -> Bool)
+    , run (prop_delete :: Inty -> [(Inty, Int)] -> Bool)
+    , run (prop_fromList :: [(Int, Int)] -> Bool)
+    , run (prop_fromList :: [(Inty, Int)] -> Bool)
+    , run (prop_toList :: [(Int, Int)] -> Bool)
+    , run (prop_toList :: [(Inty, Int)] -> Bool)
+    , run (prop_map :: [(Int, Int)] -> Bool)
+    , run (prop_map :: [(Inty, Int)] -> Bool)
+    , run (prop_filter :: [(Int, Int)] -> Bool)
+    , run (prop_filter :: [(Inty, Int)] -> Bool)
     ]

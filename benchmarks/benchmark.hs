@@ -19,17 +19,14 @@ import System.Random (mkStdGen, randomRs)
 
 instance NFData BS.ByteString
 
-hashBS :: BS.ByteString -> Int32
-hashBS = fromIntegral . hash
-
 main :: IO ()
 main = do
-    let hmbs = HM.fromList hashBS elemsBS :: HM.HamtMap BS.ByteString Int
+    let hmbs = HM.fromList elemsBS :: HM.HamtMap BS.ByteString Int
     defaultMainWith defaultConfig
         (liftIO . evaluate $ rnf [hmbs])
-        [ bench "fromList" $ nf (HM.fromList hashBS) elemsBS
+        [ bench "fromList" $ nf HM.fromList elemsBS
         , bench "lookup" $ nf (lookup keysBS) hmbs
-        , bench "insert" $ nf (insert elemsBS) (HM.empty hashBS)
+        , bench "insert" $ nf (insert elemsBS) HM.empty
         , bench "delete" $ nf (delete keysBS) hmbs
         ]
   where
@@ -39,13 +36,13 @@ main = do
     elemsBS = zip keysBS [1..n]
     keysBS  = rnd 8 n
 
-lookup :: Eq k => [k] -> HM.HamtMap k Int -> Int
+lookup :: (Eq k, Hashable k) => [k] -> HM.HamtMap k Int -> Int
 lookup xs m = foldl' (\z k -> fromMaybe z (HM.lookup k m)) 0 xs
 
-insert :: Eq k => [(k, Int)] -> HM.HamtMap k Int -> HM.HamtMap k Int
+insert :: (Eq k, Hashable k) => [(k, Int)] -> HM.HamtMap k Int -> HM.HamtMap k Int
 insert xs m0 = foldl' (\m (k, v) -> HM.insert k v m) m0 xs
 
-delete :: Eq k => [k] -> HM.HamtMap k Int -> HM.HamtMap k Int
+delete :: (Eq k, Hashable k) => [k] -> HM.HamtMap k Int -> HM.HamtMap k Int
 delete xs m0 = foldl' (\m k -> HM.delete k m) m0 xs
 
 -- | Generate a number of fixed length strings where the content of
