@@ -13,17 +13,17 @@ fromBitmap bitmap subHash =
     let mask = fromIntegral (pred (toBitmap subHash :: Word32)) :: Int32
         in bitCount32 $ bitmap .&. mask
 
-toBitmap :: (Bits t, Integral a) => a -> t
+toBitmap :: (Bits t, Num t, Integral a) => a -> t
 toBitmap subHash = 1 `shiftL` fromIntegral subHash
 
-bitmapToIndices :: (Bits a, Num b) => a -> [b]
+bitmapToIndices :: (Bits a, Num a, Num b, Eq b) => a -> [b]
 bitmapToIndices bitmap = loop 0 bitmap
     where loop _ 0  = []
           loop 32 _ = []
           loop ix bitmap | bitmap .&. 1 == 0 = loop (ix+1) (bitmap `shiftR` 1)
                          | otherwise         = ix:(loop (ix+1) (bitmap `shiftR` 1))
 
-indicesToBitmap :: (Bits a) => [Int] -> a
+indicesToBitmap :: (Bits a, Num a) => [Int] -> a
 indicesToBitmap = foldl' (\bm ix -> bm .|. (1 `shiftL` ix)) 0
 
 bitCount32 :: (Integral a) => Int32 -> a
@@ -32,7 +32,7 @@ bitCount32 x = bitCount8 ((x `shiftR` 24) .&. 0xff) +
                bitCount8 ((x `shiftR` 8) .&. 0xff) +
                bitCount8 (x .&. 0xff)
 
-bitCount8 :: (Bits a, Integral b) => a -> b
+bitCount8 :: (Bits a, Num a, Integral b) => a -> b
 bitCount8 0 = 0
 bitCount8 1 = 1
 bitCount8 2 = 1
