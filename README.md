@@ -91,9 +91,9 @@ Clojure version works.  They should also provide a decent birds-eye overview of
 my Haskell implementation.
 
 * [Understanding Clojure’s PersistentHashMap
-  ](http://blog.higher-order.net/2009/09/08/understanding-clojures-persistenthashmap-deftwice/)
+  ](http://blog.higher-order.net/2009/09/08/understanding-clojures-persistenthashmap-deftwice.html)
 * [Assoc and Clojure’s PersistentHashMap: part II
-  ](http://blog.higher-order.net/2010/08/16/assoc-and-clojures-persistenthashmap-part-ii/)
+  ](http://blog.higher-order.net/2010/08/16/assoc-and-clojures-persistenthashmap-part-ii.html)
 
 
 To do
